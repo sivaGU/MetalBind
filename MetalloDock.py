@@ -10,6 +10,7 @@ import zipfile
 import random
 import subprocess
 import platform
+import stat
 from pathlib import Path
 from typing import List, Tuple, Optional, Set
 
@@ -255,10 +256,36 @@ def run_autogrid4(autogrid_exe: Path, work_dir: Path, gpf_path: Path, timeout_s:
     # This check should only run if we've confirmed it's NOT a Windows .exe
     if not is_windows_os and not has_exe_extension:
         if not os.access(autogrid_exe, os.X_OK):
-            raise PermissionError(
-                f"AutoGrid4 executable is not executable: {autogrid_exe}\n"
-                f"Fix by running: chmod +x {autogrid_exe}"
-            )
+            # Try to automatically fix execute permissions - more aggressive fix
+            try:
+                # First try the standard chmod
+                current_stat = os.stat(autogrid_exe)
+                new_mode = current_stat.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+                os.chmod(autogrid_exe, new_mode)
+                
+                # Verify it worked
+                if os.access(autogrid_exe, os.X_OK):
+                    # Successfully fixed, continue
+                    pass
+                else:
+                    # Try setting permissions to 755 explicitly
+                    os.chmod(autogrid_exe, 0o755)
+                    if not os.access(autogrid_exe, os.X_OK):
+                        raise PermissionError(
+                            f"AutoGrid4 executable is not executable and could not be fixed: {autogrid_exe}\n"
+                            f"The file exists but lacks execute permissions. This is a Streamlit Cloud limitation.\n"
+                            f"Please ensure the files have execute permissions in Git before pushing to GitHub."
+                        )
+            except (OSError, PermissionError) as e:
+                # Could not fix permissions automatically - this happens on some cloud platforms
+                raise PermissionError(
+                    f"AutoGrid4 executable is not executable: {autogrid_exe}\n"
+                    f"Attempted to fix automatically but failed due to: {str(e)}\n\n"
+                    f"**Solution:** Ensure files have execute permissions in Git before pushing:\n"
+                    f"1. Run: git update-index --chmod=+x Files_for_GUI/autogrid4\n"
+                    f"2. Commit and push to GitHub\n"
+                    f"3. Streamlit Cloud will preserve the execute permissions"
+                )
     
     try:
         return subprocess.run(
@@ -1129,6 +1156,45 @@ def _run_cli():
 
 if __name__ == "__main__":
     _run_cli()
+
+# ==============================
+# Setup: Ensure Linux executables have execute permissions
+# ==============================
+import stat
+_setup_script = Path(__file__).parent / "setup_executables.py"
+if _setup_script.exists():
+    try:
+        exec(open(_setup_script).read())
+    except Exception:
+        pass  # Silently fail if setup script has issues
+
+# Also directly fix permissions on startup - more aggressive approach
+_files_gui_setup = Path(__file__).parent / "Files_for_GUI"
+if _files_gui_setup.exists():
+    for exe_name in ["vina", "autogrid4", "autodock4"]:
+        exe_path = _files_gui_setup / exe_name
+        if exe_path.exists() and not exe_path.is_dir():
+            try:
+                # Try multiple methods to ensure execute permissions
+                # Method 1: Add execute bits
+                current_stat = exe_path.stat()
+                new_mode = current_stat.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+                os.chmod(exe_path, new_mode)
+                
+                # Method 2: Set explicit 755 permissions
+                try:
+                    os.chmod(exe_path, 0o755)
+                except:
+                    pass
+                
+                # Method 3: Use subprocess to chmod if available
+                try:
+                    subprocess.run(["chmod", "+x", str(exe_path)], 
+                                 capture_output=True, timeout=2, check=False)
+                except:
+                    pass
+            except Exception:
+                pass  # Silently fail if we can't set permissions
 
 # ==============================
 # Streamlit UI
