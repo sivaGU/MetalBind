@@ -52,13 +52,36 @@ def autodetect_metal_center(receptor_path: Path, metals=("ZN","MG","MN","FE","CU
     return None
 
 def parse_binding_affinity(pdbqt: Path) -> str:
+    """Parse binding affinity from Vina output PDBQT file.
+    Supports both Vina and AD4 scoring formats."""
     try:
         with open(pdbqt, "r", errors="ignore") as f:
             for ln in f:
+                # Try Vina format first: "REMARK VINA RESULT:   -7.2   0.000   0.000"
                 if ln.startswith("REMARK VINA RESULT:"):
                     parts = ln.split()
                     if len(parts) >= 4:
                         return parts[3]
+                # Try AD4 format: "REMARK AD4 RESULT:   -7.2   0.000   0.000"
+                elif ln.startswith("REMARK AD4 RESULT:"):
+                    parts = ln.split()
+                    if len(parts) >= 4:
+                        return parts[3]
+                # Try generic format: "REMARK RESULT:   -7.2   0.000   0.000"
+                elif ln.startswith("REMARK RESULT:"):
+                    parts = ln.split()
+                    if len(parts) >= 3:
+                        return parts[2]
+                # Also check for estimated binding energy in AD4 verbose output
+                elif "Estimated Free Energy of Binding" in ln:
+                    parts = ln.split()
+                    # Look for the number after "Binding"
+                    for i, part in enumerate(parts):
+                        if "Binding" in part and i + 1 < len(parts):
+                            try:
+                                return str(float(parts[i + 1]))
+                            except (ValueError, IndexError):
+                                pass
     except Exception:
         pass
     return "N/A"
@@ -384,19 +407,57 @@ def _run_one(
             timeout=None if (timeout_s is None or timeout_s == 0) else int(timeout_s)
         )
         with open(log_file, "w", encoding="utf-8") as lf:
+            lf.write(f"Command: {' '.join(cmd)}\n")
+            lf.write(f"Return code: {proc.returncode}\n")
+            lf.write("\n---- STDOUT ----\n")
             if proc.stdout: lf.write(proc.stdout)
-            if proc.stderr: lf.write("\n---- STDERR ----\n"); lf.write(proc.stderr)
+            lf.write("\n---- STDERR ----\n")
+            if proc.stderr: lf.write(proc.stderr)
 
         if proc.returncode != 0:
             missing = _parse_missing_map(proc.stderr or "")
+            # Log more details about the failure
+            error_msg = proc.stderr or proc.stdout or "Unknown error"
+            with open(log_file, "a", encoding="utf-8") as lf:
+                lf.write(f"\n---- ERROR DETAILS ----\n")
+                lf.write(f"Return code: {proc.returncode}\n")
+                lf.write(f"Missing map: {missing}\n")
+                lf.write(f"Error: {error_msg[:500]}\n")
             return (False, "", 0, missing)
 
-        if not out_pdbqt.exists() or out_pdbqt.stat().st_size == 0:
+        if not out_pdbqt.exists():
+            with open(log_file, "a", encoding="utf-8") as lf:
+                lf.write(f"\n---- ERROR: Output file not created ----\n")
+                lf.write(f"Expected: {out_pdbqt}\n")
+            return (False, "", 0, None)
+
+        if out_pdbqt.stat().st_size == 0:
+            with open(log_file, "a", encoding="utf-8") as lf:
+                lf.write(f"\n---- ERROR: Output file is empty ----\n")
+                lf.write(f"File: {out_pdbqt}\n")
             return (False, "", 0, None)
 
         aff = parse_binding_affinity(out_pdbqt)
         nposes = count_poses(out_pdbqt)
+        
+        # Log parsing results
+        with open(log_file, "a", encoding="utf-8") as lf:
+            lf.write(f"\n---- PARSING RESULTS ----\n")
+            lf.write(f"Binding affinity: {aff}\n")
+            lf.write(f"Number of poses: {nposes}\n")
+        
         if aff in ("", "N/A") or nposes == 0:
+            with open(log_file, "a", encoding="utf-8") as lf:
+                lf.write(f"\n---- WARNING: No valid scores found ----\n")
+                lf.write(f"Affinity: '{aff}' (empty/N/A)\n")
+                lf.write(f"Poses: {nposes}\n")
+                # Try to read first few lines of output file for debugging
+                try:
+                    with open(out_pdbqt, "r", errors="ignore") as f:
+                        first_lines = ''.join(f.readlines()[:20])
+                        lf.write(f"\nFirst 20 lines of output:\n{first_lines}\n")
+                except:
+                    pass
             return (False, "", nposes, None)
 
         return (True, aff, nposes, None)
