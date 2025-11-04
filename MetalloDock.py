@@ -231,17 +231,29 @@ def run_autogrid4(autogrid_exe: Path, work_dir: Path, gpf_path: Path, timeout_s:
     
     # Check if it's a Windows .exe on a non-Windows system FIRST (most important check)
     is_windows_os = platform.system() == "Windows"
-    if not is_windows_os and autogrid_exe.suffix == ".exe":
+    
+    # Check filename for .exe extension (case-insensitive check)
+    exe_name_lower = str(autogrid_exe.name).lower()
+    has_exe_extension = exe_name_lower.endswith('.exe') or autogrid_exe.suffix.lower() == '.exe'
+    
+    if not is_windows_os and has_exe_extension:
+        # Detect if running on Streamlit Cloud
+        is_streamlit_cloud = os.environ.get("STREAMLIT_SERVER_URL", "").startswith("https://") or os.environ.get("STREAMLIT_SHARE", "") != ""
+        cloud_context = "Streamlit Cloud runs on Linux servers" if is_streamlit_cloud else "This system runs on Linux"
+        
         raise PermissionError(
-            "Cannot run Windows executable (.exe) on Linux/Unix system.\n\n"
-            "Solution:\n"
-            "1. Download Linux version of AutoGrid4\n"
-            "2. Place it in Files_for_GUI/ as 'autogrid4' (without .exe extension)\n"
-            "3. Make it executable: chmod +x Files_for_GUI/autogrid4"
+            f"Windows executable (.exe) detected on Linux system.\n\n"
+            f"**Why Linux?** {cloud_context}, so Windows .exe files cannot run here.\n\n"
+            f"**Solution:**\n"
+            f"1. Download Linux version of AutoGrid4 from AutoDock website\n"
+            f"2. Place it in Files_for_GUI/ as 'autogrid4' (without .exe extension)\n"
+            f"3. Commit and push to GitHub - Streamlit Cloud will automatically detect it\n"
+            f"4. The Linux executable will work on Streamlit Cloud"
         )
     
     # Check if executable (on Unix-like systems) - only for Linux executables
-    if not is_windows_os:
+    # This check should only run if we've confirmed it's NOT a Windows .exe
+    if not is_windows_os and not has_exe_extension:
         if not os.access(autogrid_exe, os.X_OK):
             raise PermissionError(
                 f"AutoGrid4 executable is not executable: {autogrid_exe}\n"
