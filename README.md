@@ -181,20 +181,9 @@ All executables and parameter files are automatically detected from the `Files_f
 - Ensure `Files_for_GUI/` folder contains all required executables
 - Check that file names match exactly (case-sensitive on Linux/Mac)
 
-## 📝 License
-
-[Add your license information here]
-
-## 🤝 Contributing
-
-[Add contribution guidelines here]
 
 ## 📧 Contact
 
-[Add contact information here]
-
+For all questions and concerns contact Dr. Sivanesan Dakshanamurthy at sd233@georgetown.edu
 ---
-
-**MetalloDock GUI** - Simplified molecular docking for metalloproteins 🧪✨
-
 
