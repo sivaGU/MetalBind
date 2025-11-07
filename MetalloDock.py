@@ -19,6 +19,12 @@ import pandas as pd
 import argparse
 import sys
 
+from summarize_smina_components import (
+    parse_log as summarize_parse_log,
+    build_summary as summarize_build_summary,
+    write_summary_csv as summarize_write_summary_csv,
+)
+
 
 SMINA_TERM_WEIGHTS = {
     "gauss1": -0.035579,
@@ -28,6 +34,55 @@ SMINA_TERM_WEIGHTS = {
     "hydrogen_bond": -0.587439,
     "num_tors_div": 1.923,
 }
+
+
+def _components_from_summary(
+    log_path: Path,
+    summary_csv_path: Path,
+    torsion_count: Optional[int],
+) -> dict:
+    """Derive SMINA component dictionary using the custom summarizer."""
+
+    affinity, intramolecular, raw_values = summarize_parse_log(log_path)
+    summary = summarize_build_summary(raw_values, intramolecular)
+    summarize_write_summary_csv(summary_csv_path, summary, affinity)
+
+    components = {
+        "SMINA_Affinity": affinity,
+        "SMINA_Intramolecular": summary.get("SMINA_Intramolecular"),
+        "SMINA_Total_Raw": summary.get("SMINA_Total_Raw"),
+        "SMINA_Total_Weighted": summary.get("SMINA_Total_Weighted"),
+        "SMINA_Num_Torsions": torsion_count,
+        "SMINA_Log_File": str(log_path),
+        "SMINA_Summary_CSV": str(summary_csv_path),
+    }
+
+    for term in ("gauss1", "gauss2", "repulsion", "hydrophobic", "hydrogen_bond"):
+        components[f"{term}_raw"] = summary.get(f"{term}_raw")
+        components[f"{term}_coeff"] = summary.get(f"{term}_coeff", SMINA_TERM_WEIGHTS[term])
+        components[f"{term}_weighted"] = summary.get(f"{term}_weighted")
+        components[term] = summary.get(term)
+        per_atom_key = f"{term}_per_atom"
+        if per_atom_key in summary:
+            components[per_atom_key] = summary.get(per_atom_key)
+
+    torsion_raw = summary.get("torsion_raw", float(torsion_count or 0))
+    torsion_coeff = summary.get("torsion_coeff", SMINA_TERM_WEIGHTS["num_tors_div"])
+    torsion_weighted = summary.get(
+        "torsion_weighted",
+        torsion_raw * torsion_coeff if torsion_raw is not None else None,
+    )
+
+    components.update(
+        {
+            "torsion_raw": torsion_raw,
+            "torsion_coeff": torsion_coeff,
+            "torsion_weighted": torsion_weighted,
+            "torsion": summary.get("torsion", torsion_weighted),
+        }
+    )
+
+    return components
 
 def _resolve_smina_executable(base_dir: Path, is_windows: bool) -> Optional[Path]:
     candidates = []
@@ -48,7 +103,8 @@ def render_home_page():
         "- Metalloprotein aware grid generation with optional zinc pseudo atoms\n"
         "- Dual scoring: AD4 orientations with SMINA per-component analysis\n"
         "- Auto-detected executables and reproducible working directory layout\n"
-        "- Shared engine for both the Streamlit GUI and the CLI presets"
+        "- Shared engine for both the Streamlit GUI and the CLI presets\n"
+        "- Component summaries generated via local `summarize_smina_components.py`"
     )
     st.subheader("Workflow Overview")
     st.markdown(
@@ -1032,6 +1088,13 @@ def run_smina_component_docking(
     if proc.returncode != 0 or not out_pdbqt.exists():
         raise RuntimeError(f"SMINA failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
 
+    docking_log = work_dir / f"SMINA_docking_{lig_name}.log"
+    docking_log.write_text(proc.stdout or "", encoding="utf-8")
+    if proc.stderr:
+        with open(docking_log, "a", encoding="utf-8") as dl:
+            dl.write("\n---- STDERR ----\n")
+            dl.write(proc.stderr)
+
     torsions = None
     with open(ligand_file, "r", errors="ignore") as lf:
         for line in lf:
@@ -1041,7 +1104,36 @@ def run_smina_component_docking(
                     if word.isdigit():
                         torsions = int(word)
                         break
-    components = parse_smina_atom_terms(atom_terms_file, proc.stdout, torsions)
+
+    score_log = work_dir / f"SMINA_score_{lig_name}.log"
+    summary_csv = work_dir / f"{lig_name}_component_summary.csv"
+
+    components = None
+
+    try:
+        score_cmd = [
+            str(smina_path),
+            "--receptor", str(receptor_file),
+            "--ligand", str(out_pdbqt),
+            "--score_only",
+        ]
+        score_proc = subprocess.run(score_cmd, capture_output=True, text=True, timeout=timeout_s)
+        score_log.write_text(score_proc.stdout or "", encoding="utf-8")
+        if score_proc.stderr:
+            with open(score_log, "a", encoding="utf-8") as sl:
+                sl.write("\n---- STDERR ----\n")
+                sl.write(score_proc.stderr)
+        if score_proc.returncode != 0:
+            raise RuntimeError(score_proc.stderr or "SMINA score-only run failed")
+        components = _components_from_summary(score_log, summary_csv, torsions)
+    except Exception:
+        components = parse_smina_atom_terms(atom_terms_file, proc.stdout, torsions)
+        if components is None:
+            components = {}
+
+    components.setdefault("SMINA_Log_File", str(score_log))
+    components.setdefault("SMINA_Summary_CSV", str(summary_csv))
+
     return components, out_pdbqt, atom_terms_file
 def parse_ad4_verbose_output(stdout: str) -> dict:
     """Parse AD4 verbose output for energy components"""
@@ -1208,18 +1300,50 @@ def hybrid_ad4_smina_single(
                 if proc_smina.stdout: lf.write(proc_smina.stdout)
                 if proc_smina.stderr: lf.write("\n---- STDERR ----\n"); lf.write(proc_smina.stderr)
             
+            pose_log = poses_dir / f"pose_{i}_score.log"
+            pose_summary_csv = poses_dir / f"pose_{i}_component_summary.csv"
+            pose_log.write_text(proc_smina.stdout or "", encoding="utf-8")
+            if proc_smina.stderr:
+                with open(pose_log, "a", encoding="utf-8") as pl:
+                    pl.write("\n---- STDERR ----\n")
+                    pl.write(proc_smina.stderr)
+
+            components = None
             if proc_smina.returncode == 0 and atom_terms_file.exists():
-                components = parse_smina_atom_terms(atom_terms_file, proc_smina.stdout, n_rot)
-                if components:
-                    metric = components.get('SMINA_Affinity')
-                    if not isinstance(metric, (int, float)):
-                        metric = components.get('SMINA_Total_Weighted')
-                    if isinstance(metric, (int, float)) and metric < best_score:
-                        best_score = metric
-                        best_components = components
-                        best_pose = i
+                try:
+                    components = _components_from_summary(pose_log, pose_summary_csv, n_rot)
+                except Exception:
+                    components = parse_smina_atom_terms(atom_terms_file, proc_smina.stdout, n_rot)
+
+            if components:
+                metric = components.get('SMINA_Affinity')
+                if not isinstance(metric, (int, float)):
+                    metric = components.get('SMINA_Total_Weighted')
+                if isinstance(metric, (int, float)) and metric < best_score:
+                    best_score = metric
+                    best_components = components
+                    best_pose = i
         
         if best_components:
+            best_summary_path = best_components.get("SMINA_Summary_CSV")
+            best_log_path = best_components.get("SMINA_Log_File")
+
+            try:
+                if best_summary_path:
+                    best_summary_path = Path(best_summary_path)
+                    if best_summary_path.exists():
+                        final_summary = out_dir / f"{lig_name}_component_summary.csv"
+                        shutil.copy2(best_summary_path, final_summary)
+                        best_components["SMINA_Summary_CSV"] = str(final_summary)
+                if best_log_path:
+                    best_log_path = Path(best_log_path)
+                    if best_log_path.exists():
+                        final_log = out_dir / f"{lig_name}_score.log"
+                        shutil.copy2(best_log_path, final_log)
+                        best_components["SMINA_Log_File"] = str(final_log)
+            except Exception:
+                pass
+
             result.update(best_components)
             # Backwards compatibility: populate legacy shorthand columns
             result['gauss1'] = best_components.get('gauss1_weighted', 'N/A')
@@ -1846,9 +1970,32 @@ with st.expander("Configuration", expanded=True):
         if backend == "Vina (box)":
             autodetect = st.checkbox("Auto-detect metal center (for Vina run)", value=True)
 
-        smina_exe = _resolve_smina_executable(files_gui_dir, is_windows)
+        detected_smina = _resolve_smina_executable(files_gui_dir, is_windows)
+        custom_smina_input = ""
+        if backend == "AD4 + SMINA (hybrid)":
+            custom_smina_input = st.text_input(
+                "SMINA executable path",
+                value=str(detected_smina) if detected_smina else "",
+                help=(
+                    "Optional override. Point to your `smina.exe` (Windows) or `smina` (Linux) binary. "
+                    "If left blank, MetalloDock looks in `Files_for_GUI/` or `SMINA Linux/`."
+                ),
+            )
+
+        smina_candidate = None
+        if custom_smina_input:
+            candidate_path = Path(custom_smina_input).expanduser().resolve()
+            if candidate_path.exists():
+                smina_candidate = candidate_path
+            else:
+                st.warning(f"SMINA binary not found at `{candidate_path}`. Please double-check the path.")
+
+        smina_exe = smina_candidate or detected_smina
+
         if backend == "AD4 + SMINA (hybrid)" and smina_exe is None:
-            st.error("SMINA executable not found. Place the binary in `Files_for_GUI/` or `SMINA Linux/` and restart.")
+            st.error(
+                "SMINA executable not found. Upload or provide the path to your `smina` binary and restart."
+            )
 
     with c2:
         st.subheader("Grid Box Settings")
