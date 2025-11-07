@@ -1653,6 +1653,12 @@ st.set_page_config(page_title="MetalloDock", layout="wide")
 
 if "current_page" not in st.session_state:
     st.session_state.current_page = "Docking"
+if "last_rows" not in st.session_state:
+    st.session_state.last_rows: List[dict] = []
+if "last_backend" not in st.session_state:
+    st.session_state.last_backend: Optional[str] = None
+if "last_out_dir" not in st.session_state:
+    st.session_state.last_out_dir: Optional[Path] = None
 
 with st.sidebar:
     st.markdown(
@@ -2193,6 +2199,10 @@ if run_btn:
     st.success("Docking complete.")
     st.dataframe(df, use_container_width=True)
 
+    st.session_state.last_rows = rows
+    st.session_state.last_backend = backend
+    st.session_state.last_out_dir = out_dir
+
     # Quick stats
     if backend == "AD4 + SMINA (hybrid)":
         st.subheader("Hybrid Analysis Results")
@@ -2230,15 +2240,24 @@ if run_btn:
             except Exception:
                 pass
 
-else:
-    st.subheader("Vina Summary")
-    try:
-        vina_affs = [float(r["Binding_Affinity"]) for r in rows if r.get("Binding_Affinity") not in ("", "N/A")]
-        if vina_affs:
-            st.write(f"Binding affinities range: {min(vina_affs):.1f} to {max(vina_affs):.1f} kcal/mol")
-            st.write(f"Average binding affinity: {sum(vina_affs)/len(vina_affs):.1f} kcal/mol")
-    except Exception:
-        pass
+rows = st.session_state.last_rows or []
+out_dir = st.session_state.last_out_dir
+last_backend = st.session_state.last_backend
+
+if rows:
+    if last_backend == "AD4 + SMINA (hybrid)":
+        st.subheader("Hybrid Summary (most recent run)")
+    else:
+        st.subheader("Vina Summary (most recent run)")
+        try:
+            vina_affs = [
+                float(r["Binding_Affinity"]) for r in rows if r.get("Binding_Affinity") not in ("", "N/A", None)
+            ]
+            if vina_affs:
+                st.write(f"Binding affinities range: {min(vina_affs):.1f} to {max(vina_affs):.1f} kcal/mol")
+                st.write(f"Average binding affinity: {sum(vina_affs)/len(vina_affs):.1f} kcal/mol")
+        except Exception:
+            pass
 
     st.download_button(
         "Download results CSV",
@@ -2246,11 +2265,12 @@ else:
         file_name="pfas_docking_results.csv",
         mime="text/csv",
     )
-    if out_dir.exists():
+    if out_dir and Path(out_dir).exists():
+        out_dir_path = Path(out_dir)
         st.download_button(
             "Download all output PDBQTs (ZIP)",
-            data=zip_outputs(out_dir),
-            file_name=f"{out_dir.name}.zip",
+            data=zip_outputs(out_dir_path),
+            file_name=f"{out_dir_path.name}.zip",
             mime="application/zip",
         )
 
