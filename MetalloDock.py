@@ -990,8 +990,23 @@ def run_smina_component_docking(
     out_pdbqt = work_dir / f"SMINA_output_{lig_name}.pdbqt"
     atom_terms_file = work_dir / f"SMINA_atom_terms_{lig_name}.txt"
 
+    smina_path = Path(smina_exe)
+    # On Linux deployments (e.g., Streamlit Cloud) ensure the binary is executable
+    if platform.system() != "Windows":
+        if not os.access(smina_path, os.X_OK):
+            try:
+                current_stat = os.stat(smina_path)
+                new_mode = current_stat.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+                os.chmod(smina_path, new_mode)
+                if not os.access(smina_path, os.X_OK):
+                    os.chmod(smina_path, 0o755)
+            except Exception as exc:
+                raise PermissionError(
+                    "SMINA binary exists but is not executable. Set execute permissions before deploying (git update-index --chmod=+x 'SMINA Linux/smina')."
+                ) from exc
+
     cmd = [
-        str(smina_exe),
+        str(smina_path),
         "--receptor", str(receptor_file),
         "--ligand", str(ligand_file),
         "--center_x", str(center[0]),
@@ -1006,7 +1021,14 @@ def run_smina_component_docking(
         "--atom_terms", str(atom_terms_file)
     ]
 
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+    except PermissionError as exc:
+        if platform.system() != "Windows":
+            raise PermissionError(
+                f"Permission denied when running SMINA at {smina_path}. Ensure the binary has execute permissions (chmod +x '{smina_path}'), then redeploy."
+            ) from exc
+        raise
     if proc.returncode != 0 or not out_pdbqt.exists():
         raise RuntimeError(f"SMINA failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
 
