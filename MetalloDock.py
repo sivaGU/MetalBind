@@ -16,20 +16,6 @@ from typing import List, Tuple, Optional, Set, Dict
 
 REPO_ROOT = Path(__file__).resolve().parent
 
-# Demo presets
-DEMO_RECEPTOR_SETTINGS = {
-    "Carbonic Anhydrase I (7Q0D)": {
-        "center": (29.951, 0.420, -4.735),
-        "size": (16.0, 18.0, 16.0),
-        "spacing": 0.38,
-    },
-    "Carbonic Anhydrase II (2VVB)": {
-        "center": (-6.421, 0.342, 17.256),
-        "size": (20.0, 20.0, 20.0),
-        "spacing": 0.38,
-    },
-}
-
 import streamlit as st
 import pandas as pd
 import argparse
@@ -1209,15 +1195,18 @@ st.set_page_config(page_title="MetalloDock", layout="wide")
 if "nav_open" not in st.session_state:
     st.session_state.nav_open = True
 if "current_page" not in st.session_state:
-    st.session_state.current_page = "MetalloDock Demo"
+    st.session_state.current_page = "Demo"
 
 nav_pages = [
     "Home",
     "Documentation",
-    "MetalloDock Demo",
+    "Demo",
     "Standard AutoDock",
     "Metalloprotein Docking",
 ]
+
+if st.session_state.current_page not in nav_pages:
+    st.session_state.current_page = "Demo"
 
 with st.sidebar:
     toggle_label = "«" if st.session_state.nav_open else "»"
@@ -1242,14 +1231,11 @@ if page == "Documentation":
     render_documentation_page()
     st.stop()
 
-page_mode = "generic"
-
-if page == "MetalloDock Demo":
-    page_mode = "demo"
-elif page == "Standard AutoDock":
-    page_mode = "vina"
-elif page == "Metalloprotein Docking":
-    page_mode = "ad4"
+page_mode = {
+    "Demo": "demo",
+    "Standard AutoDock": "vina",
+    "Metalloprotein Docking": "ad4",
+}.get(page, "generic")
 
 st.title(page)
 
@@ -1264,27 +1250,7 @@ work_dir.mkdir(parents=True, exist_ok=True)
 st.caption(f"Using working directory: `{work_dir}`")
 
 # Receptor and Ligand Setup
-demo_mode = page_mode == "demo"
-
 receptor_default_path = str((work_dir / "receptor.pdbqt").resolve())
-demo_preset = None
-selected_preset_name = None
-
-if demo_mode:
-    st.subheader("Select Receptor Preset")
-    preset_names = list(DEMO_RECEPTOR_SETTINGS.keys())
-    default_preset_name = st.session_state.get("demo_selected_name", preset_names[0])
-    if default_preset_name not in preset_names:
-        default_preset_name = preset_names[0]
-    preset_index = preset_names.index(default_preset_name)
-    selected_preset_name = st.selectbox(
-        "Choose receptor preset",
-        preset_names,
-        index=preset_index,
-        key="demo_receptor_selector"
-    )
-    st.session_state["demo_selected_name"] = selected_preset_name
-    demo_preset = DEMO_RECEPTOR_SETTINGS[selected_preset_name]
 
 st.subheader("Upload Receptor & Ligands")
 upload_col1, upload_col2 = st.columns(2)
@@ -1383,24 +1349,7 @@ if receptor_path:
 
 # ---------------------------------------------
 
-if demo_mode:
-    allowed_backends = ["AD4 (maps)"]
-    default_backend_label = "AD4 (maps)"
-    preset_center = demo_preset["center"] if demo_preset else (-6.421, 0.342, 17.256)
-    preset_size = demo_preset["size"] if demo_preset else (20.0, 20.0, 20.0)
-    preset_spacing = demo_preset.get("spacing", 0.38) if demo_preset else 0.38
-    grid_defaults = {
-        "center": preset_center,
-        "size": preset_size,
-        "spacing": preset_spacing,
-    }
-    if receptor_path and receptor_path.stem:
-        receptor_stem = receptor_path.stem
-    else:
-        preset_slug = selected_preset_name or "demo_receptor"
-        receptor_stem = "_".join(preset_slug.split()).lower()
-    maps_prefix_default = str((work_dir / "ad4_maps" / receptor_stem).resolve())
-elif page_mode == "vina":
+if page_mode == "vina":
     allowed_backends = ["Vina (box)"]
     default_backend_label = "Vina (box)"
     grid_defaults = {
@@ -1409,7 +1358,7 @@ elif page_mode == "vina":
         "spacing": 0.0,
     }
     maps_prefix_default = str((work_dir / "ad4_maps" / "receptor_maps").resolve())
-elif page_mode == "ad4":
+elif page_mode in ("ad4", "demo"):
     allowed_backends = ["AD4 (maps)"]
     default_backend_label = "AD4 (maps)"
     grid_defaults = {
@@ -1417,7 +1366,8 @@ elif page_mode == "ad4":
         "size": (0.0, 0.0, 0.0),
         "spacing": 0.0,
     }
-    maps_prefix_default = str((work_dir / "ad4_maps" / "receptor_maps").resolve())
+    prefix_name = "demo_maps" if page_mode == "demo" else "receptor_maps"
+    maps_prefix_default = str((work_dir / "ad4_maps" / prefix_name).resolve())
 else:
     allowed_backends = ["Vina (box)", "AD4 (maps)"]
     default_backend_label = "AD4 (maps)"
@@ -1469,27 +1419,17 @@ with st.expander("Configuration", expanded=True):
         default_size = grid_defaults["size"]
         default_spacing = grid_defaults["spacing"]
 
-        if demo_mode:
-            receptor_state_key = f"{page_mode}_selected_receptor"
-            if st.session_state.get(receptor_state_key) != selected_preset_name:
-                st.session_state[receptor_state_key] = selected_preset_name
-                for idx, axis in enumerate(["x", "y", "z"]):
-                    st.session_state[center_keys[axis]] = default_center[idx]
-                    st.session_state[size_keys[axis]] = default_size[idx]
-                st.session_state[spacing_key] = default_spacing
-                st.session_state[f"{page_mode}_maps_prefix"] = maps_prefix_default
-        else:
-            for idx, axis in enumerate(["x", "y", "z"]):
-                center_key = center_keys[axis]
-                size_key = size_keys[axis]
-                if center_key not in st.session_state:
-                    st.session_state[center_key] = default_center[idx]
-                if size_key not in st.session_state:
-                    st.session_state[size_key] = default_size[idx]
-            if spacing_key not in st.session_state:
-                st.session_state[spacing_key] = default_spacing
-            if f"{page_mode}_maps_prefix" not in st.session_state:
-                st.session_state[f"{page_mode}_maps_prefix"] = maps_prefix_default
+        for idx, axis in enumerate(["x", "y", "z"]):
+            center_key = center_keys[axis]
+            size_key = size_keys[axis]
+            if center_key not in st.session_state:
+                st.session_state[center_key] = default_center[idx]
+            if size_key not in st.session_state:
+                st.session_state[size_key] = default_size[idx]
+        if spacing_key not in st.session_state:
+            st.session_state[spacing_key] = default_spacing
+        if f"{page_mode}_maps_prefix" not in st.session_state:
+            st.session_state[f"{page_mode}_maps_prefix"] = maps_prefix_default
 
         grid_c1, grid_c2, grid_c3 = st.columns(3)
         with grid_c1:
@@ -1497,24 +1437,21 @@ with st.expander("Configuration", expanded=True):
                 "center_x",
                 value=st.session_state[center_keys["x"]],
                 format="%.3f",
-                key=center_keys["x"],
-                disabled=demo_mode
+                key=center_keys["x"]
             )
         with grid_c2:
             center_y = st.number_input(
                 "center_y",
                 value=st.session_state[center_keys["y"]],
                 format="%.3f",
-                key=center_keys["y"],
-                disabled=demo_mode
+                key=center_keys["y"]
             )
         with grid_c3:
             center_z = st.number_input(
                 "center_z",
                 value=st.session_state[center_keys["z"]],
                 format="%.3f",
-                key=center_keys["z"],
-                disabled=demo_mode
+                key=center_keys["z"]
             )
 
         sz1, sz2, sz3 = st.columns(3)
@@ -1524,8 +1461,7 @@ with st.expander("Configuration", expanded=True):
                 value=st.session_state[size_keys["x"]],
                 min_value=0.0,
                 step=0.25,
-                key=size_keys["x"],
-                disabled=demo_mode
+                key=size_keys["x"]
             )
         with sz2:
             size_y = st.number_input(
@@ -1533,8 +1469,7 @@ with st.expander("Configuration", expanded=True):
                 value=st.session_state[size_keys["y"]],
                 min_value=0.0,
                 step=0.25,
-                key=size_keys["y"],
-                disabled=demo_mode
+                key=size_keys["y"]
             )
         with sz3:
             size_z = st.number_input(
@@ -1542,8 +1477,7 @@ with st.expander("Configuration", expanded=True):
                 value=st.session_state[size_keys["z"]],
                 min_value=0.0,
                 step=0.25,
-                key=size_keys["z"],
-                disabled=demo_mode
+                key=size_keys["z"]
             )
 
         spacing = st.number_input(
@@ -1552,8 +1486,7 @@ with st.expander("Configuration", expanded=True):
             min_value=0.0,
             max_value=1.0,
             step=0.01,
-            key=spacing_key,
-            disabled=demo_mode
+            key=spacing_key
         )
 
         if "AD4 (maps)" in allowed_backends:
