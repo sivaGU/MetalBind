@@ -1276,12 +1276,11 @@ if page_mode == "demo":
     )
     demo_selected_receptor = receptor_choice
     receptor_info = demo_receptors[receptor_choice]
-    demo_receptor_src = receptor_info["path"].resolve()
-    demo_assets_dir = work_dir / "demo_assets"
+    demo_assets_dir = work_dir / "MetalloDock_demo_assets"
     demo_assets_dir.mkdir(parents=True, exist_ok=True)
-    demo_receptor_dst = demo_assets_dir / demo_receptor_src.name
+    demo_receptor_dst = demo_assets_dir / receptor_info["path"].name
     if not demo_receptor_dst.exists():
-        shutil.copy2(demo_receptor_src, demo_receptor_dst)
+        shutil.copy2(receptor_info["path"], demo_receptor_dst)
     receptor_path = demo_receptor_dst
 
     ligand_files = sorted(PFAS_LIGANDS_DIR.glob("*.pdbqt"))
