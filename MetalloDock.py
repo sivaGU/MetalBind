@@ -14,6 +14,12 @@ import stat
 from pathlib import Path
 from typing import List, Tuple, Optional, Set, Dict
 
+REPO_ROOT = Path(__file__).resolve().parent
+DEMO_ASSETS_DIR = REPO_ROOT / "MetalloDock Receptors and Ligands"
+CAI_RECEPTOR = DEMO_ASSETS_DIR / "Carbonic_Anhydrase_I.pdbqt"
+CAII_RECEPTOR = DEMO_ASSETS_DIR / "Carbonic_Anhydrase_II.pdbqt"
+PFAS_LIGANDS_DIR = DEMO_ASSETS_DIR / "18 PFAS"
+
 import streamlit as st
 import pandas as pd
 import argparse
@@ -1048,7 +1054,7 @@ def run_endogenous_preset_ad4(preset_key: str, headless: bool = False) -> List[d
         max_retries=int(max_retries),
         exhu_backoff=float(exhu_backoff),
         modes_backoff=float(modes_backoff),
-        progress_cb=(_cb if not headless else None),
+        progress_cb=_cb,
         maps_prefix=maps_prefix,
         skip_if_output_exists=bool(skip_exists),
     )
@@ -1194,7 +1200,15 @@ st.set_page_config(page_title="MetalloDock", layout="wide")
 if "nav_open" not in st.session_state:
     st.session_state.nav_open = True
 if "current_page" not in st.session_state:
-    st.session_state.current_page = "Docking"
+    st.session_state.current_page = "MetalloDock Demo"
+
+nav_pages = [
+    "Home",
+    "Documentation",
+    "MetalloDock Demo",
+    "Standard AutoDock Vina Docking",
+    "Metalloprotein Docking",
+]
 
 with st.sidebar:
     toggle_label = "«" if st.session_state.nav_open else "»"
@@ -1203,8 +1217,8 @@ with st.sidebar:
     if st.session_state.nav_open:
         page = st.radio(
             "Navigation",
-            ["Home", "Documentation", "Docking"],
-            index=["Home", "Documentation", "Docking"].index(st.session_state.current_page)
+            nav_pages,
+            index=nav_pages.index(st.session_state.current_page)
         )
         st.session_state.current_page = page
     else:
@@ -1219,7 +1233,14 @@ if page == "Documentation":
     render_documentation_page()
     st.stop()
 
-st.title("MetalloDock")
+if page == "MetalloDock Demo":
+    page_mode = "demo"
+elif page == "Standard AutoDock Vina Docking":
+    page_mode = "vina"
+elif page == "Metalloprotein Docking":
+    page_mode = "ad4"
+
+st.title(page)
 
 # Working directory chooser
 work_dir_input = st.text_input(
@@ -1231,28 +1252,113 @@ work_dir = Path(work_dir_input).expanduser().resolve()
 work_dir.mkdir(parents=True, exist_ok=True)
 st.caption(f"Using working directory: `{work_dir}`")
 
-# Receptor and Ligand Upload Section (Top)
-st.subheader("Upload Receptor & Ligands")
-upload_col1, upload_col2 = st.columns(2)
+# Receptor and Ligand Setup
+if page_mode == "demo":
+    st.subheader("Select Receptor & Ligands")
+    demo_receptors = {
+        "Carbonic Anhydrase I (7Q0D)": {
+            "path": CAI_RECEPTOR,
+            "center": (29.951, 0.420, -4.735),
+            "size": (16.0, 18.0, 16.0),
+        },
+        "Carbonic Anhydrase II (2VVB)": {
+            "path": CAII_RECEPTOR,
+            "center": (-6.421, 0.342, 17.256),
+            "size": (20.0, 20.0, 20.0),
+        },
+    }
+    receptor_choice = st.selectbox(
+        "Select receptor",
+        list(demo_receptors.keys()),
+        key="demo_receptor_choice"
+    )
+    demo_selected_receptor = receptor_choice
+    receptor_info = demo_receptors[receptor_choice]
+    receptor_path = receptor_info["path"].resolve()
 
-with upload_col1:
-    st.markdown("**Receptor**")
-    receptor_input_mode = st.radio("Provide receptor via:", ["Upload file", "Local path"], index=0, horizontal=True)
-    receptor_uploaded = None
-    receptor_local_path = None
-    if receptor_input_mode == "Upload file":
-        receptor_uploaded = st.file_uploader("Upload receptor (PDBQT)", type=["pdbqt"], accept_multiple_files=False, key="receptor_upload")
+    ligand_files = sorted(PFAS_LIGANDS_DIR.glob("*.pdbqt"))
+    ligand_labels = [p.name for p in ligand_files]
+    if not ligand_labels:
+        st.error("No ligands found in `MetalloDock Receptors and Ligands/18 PFAS`. Add the sample PFAS ligands to run the demo.")
+        ligand_paths = []
     else:
-        receptor_local_path = st.text_input("Receptor file path", value=str((work_dir / "receptor.pdbqt").resolve()), key="receptor_path")
+        selected_labels = st.multiselect(
+            "Select ligand(s)",
+            ligand_labels,
+            default=ligand_labels,
+            key="demo_ligand_select"
+        )
+        ligand_lookup = {p.name: p for p in ligand_files}
+        ligand_paths = [ligand_lookup[name] for name in selected_labels if name in ligand_lookup]
+        if not ligand_paths:
+            st.warning("Select at least one ligand to enable docking.")
 
-with upload_col2:
-    st.markdown("**Ligands**")
-    lig_src = st.text_input("Ligand SOURCE folder (to prepare)", value=str((work_dir / "Files_for_GUI" / "Ligands").resolve()), key="lig_src")
-    prep_btn = st.button("Prepare ligands from SOURCE → prepared_ligands", key="prep_btn")
-    lig_mode = st.radio("Docking ligands come from:", ["prepared_ligands folder", "Upload now"], index=0, key="lig_mode")
+    prep_btn = False
+    lig_mode = "demo"
     ligand_uploads = []
-    if lig_mode == "Upload now":
-        ligand_uploads = st.file_uploader("Upload ligand PDBQT files", type=["pdbqt"], accept_multiple_files=True, key="ligand_upload")
+    lig_src = None
+else:
+    st.subheader("Upload Receptor & Ligands")
+    upload_col1, upload_col2 = st.columns(2)
+
+    with upload_col1:
+        st.markdown("**Receptor**")
+        receptor_input_mode = st.radio("Provide receptor via:", ["Upload file", "Local path"], index=0, horizontal=True)
+        receptor_uploaded = None
+        receptor_local_path = None
+        if receptor_input_mode == "Upload file":
+            receptor_uploaded = st.file_uploader("Upload receptor (PDBQT)", type=["pdbqt"], accept_multiple_files=False, key="receptor_upload")
+        else:
+            receptor_local_path = st.text_input("Receptor file path", value=str((work_dir / "receptor.pdbqt").resolve()), key="receptor_path")
+
+    with upload_col2:
+        st.markdown("**Ligands**")
+        lig_src = st.text_input("Ligand SOURCE folder (to prepare)", value=str((work_dir / "Files_for_GUI" / "Ligands").resolve()), key="lig_src")
+        prep_btn = st.button("Prepare ligands from SOURCE → prepared_ligands", key="prep_btn")
+        lig_mode = st.radio("Docking ligands come from:", ["prepared_ligands folder", "Upload now"], index=0, key="lig_mode")
+        ligand_uploads = []
+        if lig_mode == "Upload now":
+            ligand_uploads = st.file_uploader("Upload ligand PDBQT files", type=["pdbqt"], accept_multiple_files=True, key="ligand_upload")
+
+    demo_selected_receptor = None
+    ligand_paths: List[Path] = []
+
+if page_mode == "demo":
+    allowed_backends = ["Vina (box)", "AD4 (maps)"]
+    default_backend_label = "AD4 (maps)"
+    grid_defaults = {
+        "center": receptor_info["center"],
+        "size": receptor_info["size"],
+        "spacing": 0.38,
+    }
+    maps_prefix_default = str((work_dir / "ad4_maps" / receptor_path.stem).resolve())
+elif page_mode == "vina":
+    allowed_backends = ["Vina (box)"]
+    default_backend_label = "Vina (box)"
+    grid_defaults = {
+        "center": (0.0, 0.0, 0.0),
+        "size": (0.0, 0.0, 0.0),
+        "spacing": 0.0,
+    }
+    maps_prefix_default = str((work_dir / "ad4_maps" / "receptor_maps").resolve())
+elif page_mode == "ad4":
+    allowed_backends = ["AD4 (maps)"]
+    default_backend_label = "AD4 (maps)"
+    grid_defaults = {
+        "center": (0.0, 0.0, 0.0),
+        "size": (0.0, 0.0, 0.0),
+        "spacing": 0.0,
+    }
+    maps_prefix_default = str((work_dir / "ad4_maps" / "receptor_maps").resolve())
+else:
+    allowed_backends = ["Vina (box)", "AD4 (maps)"]
+    default_backend_label = "AD4 (maps)"
+    grid_defaults = {
+        "center": (-6.421, 0.342, 17.256),
+        "size": (20.0, 20.0, 20.0),
+        "spacing": 0.38,
+    }
+    maps_prefix_default = str((work_dir / "ad4_maps" / "receptor_maps").resolve())
 
 build_maps_btn = False
 
@@ -1260,51 +1366,141 @@ with st.expander("Configuration", expanded=True):
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Executables & Scripts")
-        backend = st.radio("Docking backend", [
-            "Vina (box)",
-            "AD4 (maps)"
-        ], index=1)
-        if backend == "Vina (box)":
-            st.info("Vina (box): standard Vina docking using the defined search box.")
+        if len(allowed_backends) == 1:
+            backend = allowed_backends[0]
+            st.markdown(f"**Docking backend:** `{backend}`")
         else:
-            st.info(
-                "AD4 (maps): docks with AutoDock4 maps to produce classical AD4 energy components."
+            backend = st.radio(
+                "Docking backend",
+                allowed_backends,
+                index=allowed_backends.index(default_backend_label),
+                key=f"{page_mode}_backend"
             )
         autodetect = False
         if backend == "Vina (box)":
-            autodetect = st.checkbox("Auto-detect metal center (for Vina run)", value=True)
+            autodetect = st.checkbox(
+                "Auto-detect metal center (for Vina run)",
+                value=True,
+                key=f"{page_mode}_autodetect"
+            )
     with c2:
         st.subheader("Grid Box Settings")
+        center_keys = {
+            "x": f"{page_mode}_center_x",
+            "y": f"{page_mode}_center_y",
+            "z": f"{page_mode}_center_z",
+        }
+        size_keys = {
+            "x": f"{page_mode}_size_x",
+            "y": f"{page_mode}_size_y",
+            "z": f"{page_mode}_size_z",
+        }
+        spacing_key = f"{page_mode}_spacing"
+
+        if page_mode == "demo":
+            receptor_state_key = f"{page_mode}_selected_receptor"
+            if st.session_state.get(receptor_state_key) != demo_selected_receptor:
+                st.session_state[receptor_state_key] = demo_selected_receptor
+                st.session_state[center_keys["x"]] = grid_defaults["center"][0]
+                st.session_state[center_keys["y"]] = grid_defaults["center"][1]
+                st.session_state[center_keys["z"]] = grid_defaults["center"][2]
+                st.session_state[size_keys["x"]] = grid_defaults["size"][0]
+                st.session_state[size_keys["y"]] = grid_defaults["size"][1]
+                st.session_state[size_keys["z"]] = grid_defaults["size"][2]
+                st.session_state[spacing_key] = grid_defaults["spacing"]
+                st.session_state[f"{page_mode}_maps_prefix"] = maps_prefix_default
+        else:
+            for idx, axis in enumerate(["x", "y", "z"]):
+                key = center_keys[axis]
+                if key not in st.session_state:
+                    st.session_state[key] = grid_defaults["center"][idx]
+                key = size_keys[axis]
+                if key not in st.session_state:
+                    st.session_state[key] = grid_defaults["size"][idx]
+            if spacing_key not in st.session_state:
+                st.session_state[spacing_key] = grid_defaults["spacing"]
+            if f"{page_mode}_maps_prefix" not in st.session_state:
+                st.session_state[f"{page_mode}_maps_prefix"] = maps_prefix_default
+
         grid_c1, grid_c2, grid_c3 = st.columns(3)
         with grid_c1:
-            center_x = st.number_input("center_x", value=-6.421, format="%.3f")
+            center_x = st.number_input(
+                "center_x",
+                value=st.session_state[center_keys["x"]],
+                format="%.3f",
+                key=center_keys["x"]
+            )
         with grid_c2:
-            center_y = st.number_input("center_y", value=0.342, format="%.3f")
+            center_y = st.number_input(
+                "center_y",
+                value=st.session_state[center_keys["y"]],
+                format="%.3f",
+                key=center_keys["y"]
+            )
         with grid_c3:
-            center_z = st.number_input("center_z", value=17.256, format="%.3f")
+            center_z = st.number_input(
+                "center_z",
+                value=st.session_state[center_keys["z"]],
+                format="%.3f",
+                key=center_keys["z"]
+            )
 
         sz1, sz2, sz3 = st.columns(3)
         with sz1:
-            size_x = st.number_input("size_x (Å)", value=20.0, min_value=1.0, step=0.25)
+            size_x = st.number_input(
+                "size_x (Å)",
+                value=st.session_state[size_keys["x"]],
+                min_value=0.0,
+                step=0.25,
+                key=size_keys["x"]
+            )
         with sz2:
-            size_y = st.number_input("size_y (Å)", value=20.0, min_value=1.0, step=0.25)
+            size_y = st.number_input(
+                "size_y (Å)",
+                value=st.session_state[size_keys["y"]],
+                min_value=0.0,
+                step=0.25,
+                key=size_keys["y"]
+            )
         with sz3:
-            size_z = st.number_input("size_z (Å)", value=20.0, min_value=1.0, step=0.25)
+            size_z = st.number_input(
+                "size_z (Å)",
+                value=st.session_state[size_keys["z"]],
+                min_value=0.0,
+                step=0.25,
+                key=size_keys["z"]
+            )
 
-        spacing = st.number_input("AD4 grid spacing (Å)", value=0.38, min_value=0.2, max_value=1.0, step=0.025)
+        spacing = st.number_input(
+            "AD4 grid spacing (Å)",
+            value=st.session_state[spacing_key],
+            min_value=0.0,
+            max_value=1.0,
+            step=0.01,
+            key=spacing_key
+        )
 
-        st.markdown("**Maps**")
-        maps_prefix_input = st.text_input(
-            "AD4 maps prefix (no extension)",
-            value=str((work_dir / "ad4_maps" / "receptor_maps").resolve()),
-            help="Folder will be created if missing (receptor_maps.gpf, *.map, *.fld, etc.)."
-        )
-        force_extra_types = st.text_input(
-            "Force-include extra ligand atom types when building/patching maps (comma-separated)",
-            value="S,NA",
-            help="If you *know* you need maps like S or NA, list them here to guarantee creation."
-        )
-        build_maps_btn = st.button("Build/Update AD4 maps (auto-detect & include missing types)")
+        if "AD4 (maps)" in allowed_backends:
+            maps_prefix_input = st.text_input(
+                "AD4 maps prefix (no extension)",
+                value=st.session_state[f"{page_mode}_maps_prefix"],
+                help="Folder will be created if missing (receptor_maps.gpf, *.map, *.fld, etc.).",
+                key=f"{page_mode}_maps_prefix"
+            )
+            force_extra_types = st.text_input(
+                "Force-include extra ligand atom types when building/patching maps (comma-separated)",
+                value=st.session_state.get(f"{page_mode}_force_types", "S,NA"),
+                help="If you *know* you need maps like S or NA, list them here to guarantee creation.",
+                key=f"{page_mode}_force_types"
+            )
+            build_maps_btn = st.button(
+                "Build/Update AD4 maps (auto-detect & include missing types)",
+                key=f"{page_mode}_build_maps"
+            )
+        else:
+            maps_prefix_input = st.session_state.get(f"{page_mode}_maps_prefix", maps_prefix_default)
+            force_extra_types = "S,NA"
+            build_maps_btn = False
 
 files_gui_dir = work_dir / "Files_for_GUI"
 is_windows = platform.system() == "Windows"
@@ -1386,28 +1582,31 @@ test_btn = st.button("Test executables")
 ligand_paths: List[Path] = []
 prepared_root = work_dir
 
-if prep_btn:
-    try:
-        prepared = prepare_ligands_from_folder(Path(lig_src).expanduser().resolve(), prepared_root)
-        st.success(f"Prepared {len(prepared)} ligands → {prepared[0].parent}")
-    except Exception as e:
-        st.error(str(e))
+if page_mode != "demo":
+    if prep_btn:
+        try:
+            prepared = prepare_ligands_from_folder(Path(lig_src).expanduser().resolve(), prepared_root)
+            st.success(f"Prepared {len(prepared)} ligands → {prepared[0].parent}")
+        except Exception as e:
+            st.error(str(e))
 
-if lig_mode == "Upload now" and ligand_uploads:
-    lig_dir = work_dir / "ligands_uploaded"
-    lig_dir.mkdir(parents=True, exist_ok=True)
-    for up in ligand_uploads:
-        ligand_paths.append(_save_uploaded_file(up, lig_dir))
-else:
-    default_prepared_dir = prepared_root / "prepared_ligands" / "ligands_no_hydrogens"
-    ligand_paths = sorted(default_prepared_dir.glob("*.pdbqt"))
+    if lig_mode == "Upload now" and ligand_uploads:
+        lig_dir = work_dir / "ligands_uploaded"
+        lig_dir.mkdir(parents=True, exist_ok=True)
+        for up in ligand_uploads:
+            ligand_paths.append(_save_uploaded_file(up, lig_dir))
+    else:
+        default_prepared_dir = prepared_root / "prepared_ligands" / "ligands_no_hydrogens"
+        ligand_paths = sorted(default_prepared_dir.glob("*.pdbqt"))
 
 # Resolve receptor path
 receptor_path: Optional[Path] = None
-if receptor_input_mode == "Upload file" and receptor_uploaded is not None:
-    receptor_path = _save_uploaded_file(receptor_uploaded, work_dir / "receptor")
-elif receptor_input_mode == "Local path" and receptor_local_path:
-    receptor_path = Path(receptor_local_path).expanduser().resolve()
+if page_mode != "demo":
+    receptor_path = None
+    if receptor_input_mode == "Upload file" and receptor_uploaded is not None:
+        receptor_path = _save_uploaded_file(receptor_uploaded, work_dir / "receptor")
+    elif receptor_input_mode == "Local path" and receptor_local_path:
+        receptor_path = Path(receptor_local_path).expanduser().resolve()
 
 # Test executables
 if test_btn:
@@ -1592,6 +1791,10 @@ if build_maps_btn:
             st.error("Still missing maps for: " + ", ".join(missing_after))
         else:
             st.success("All requested ligand-type maps are present.")
+
+    if float(spacing) <= 0:
+        st.error("Grid spacing must be greater than zero before building AD4 maps.")
+        st.stop()
 
 # ==============================
 # Run docking
@@ -1782,8 +1985,8 @@ if run_btn:
         st.info("Run docking to see results.")
 
 st.caption(
-    "Tips:\n"
-    "• If you see “Affinity map for atom type X is not present”, click **Build/Update AD4 maps** with X in Force-include.\n"
-    "• The app now scans **all ligands** to decide which maps to make, and prints per-ligand **Score** or **missing map** in the console.\n"
-    "• Use **No timeout** for tough ligands; or enable soft timeouts with retries/backoff."
+    """Tips:
+• If you see "Affinity map for atom type X is not present", click **Build/Update AD4 maps** with X in Force-include.
+• The app now scans **all ligands** to decide which maps to make, and prints per-ligand **Score** or **missing map** in the console.
+• Use **No timeout** for tough ligands; or enable soft timeouts with retries/backoff."""
 )
