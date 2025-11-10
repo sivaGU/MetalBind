@@ -1736,7 +1736,7 @@ with st.expander("Configuration", expanded=True):
 
         # Auto-detect executables and parameters from Files_for_GUI (no user input needed)
 files_gui_dir = work_dir / "Files_for_GUI"
-import sys
+is_windows = platform.system() == "Windows"
 autodetect = False
 if backend == "Vina (box)":
     autodetect = st.checkbox("Auto-detect metal center (for Vina run)", value=True)
@@ -1812,12 +1812,7 @@ with b1:
 with b2:
     modes_backoff = st.number_input("num_modes multiplier on retry", value=1.25, min_value=1.0, step=0.05)
 
-# Auto-detect executables and parameters from Files_for_GUI (no user input needed)
-files_gui_dir = work_dir / "Files_for_GUI"
-import sys
-
 # Detect operating system
-is_windows = platform.system() == "Windows"
 exe_ext = ".exe" if is_windows else ""
 
 # Always enable receptor oxygen normalization (O→OA)
