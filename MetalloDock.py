@@ -36,11 +36,13 @@ DEMO_RECEPTOR_SETTINGS = {
         "path": _DEMO_RECEPTOR_DIR / "Carbonic_Anhydrase_I.pdbqt",
         "center": (29.951, 0.420, -4.735),
         "size": (16.0, 18.0, 16.0),
+        "spacing": 0.38,
     },
     "Carbonic Anhydrase II (2VVB)": {
         "path": _DEMO_RECEPTOR_DIR / "Carbonic_Anhydrase_II.pdbqt",
         "center": (-6.421, 0.342, 17.256),
         "size": (20.0, 20.0, 20.0),
+        "spacing": 0.38,
     },
 }
 DEMO_LIGAND_SOURCE_DIR = _DEMO_LIGAND_DIR
@@ -1286,210 +1288,133 @@ work_dir.mkdir(parents=True, exist_ok=True)
 st.caption(f"Using working directory: `{work_dir}`")
 
 # Receptor and Ligand Setup
-if page_mode == "demo":
-    st.subheader("Select Receptor & Ligands")
-    missing_messages = []
-    if not DEMO_RECEPTOR_DIR_FOUND:
-        missing_messages.append(
-            "receptors in one of: " + ", ".join(str(p) for p in DEMO_RECEPTOR_DIR_CANDIDATES)
-        )
-    if not DEMO_LIGAND_DIR_FOUND:
-        missing_messages.append(
-            "ligands in one of: " + ", ".join(str(p) for p in DEMO_LIGAND_DIR_CANDIDATES)
-        )
-    if missing_messages:
-        st.error("Demo assets folder missing. Expected " + "; ".join(missing_messages) + ".")
+demo_mode = page_mode == "demo"
 
-    receptor_choice = st.selectbox(
-        "Select receptor",
-        list(DEMO_RECEPTOR_SETTINGS.keys()),
-        key="demo_receptor_choice"
+receptor_default_path = str((work_dir / "receptor.pdbqt").resolve())
+demo_preset = None
+selected_preset_name = None
+
+if demo_mode:
+    st.subheader("Select Receptor Preset")
+    preset_names = list(DEMO_RECEPTOR_SETTINGS.keys())
+    default_preset_name = st.session_state.get("demo_selected_name", preset_names[0])
+    if default_preset_name not in preset_names:
+        default_preset_name = preset_names[0]
+    preset_index = preset_names.index(default_preset_name)
+    selected_preset_name = st.selectbox(
+        "Choose receptor preset",
+        preset_names,
+        index=preset_index,
+        key="demo_receptor_selector"
     )
-    demo_selected_receptor = receptor_choice
-    receptor_info = DEMO_RECEPTOR_SETTINGS[receptor_choice]
-    demo_assets_dir = work_dir / "MetalloDock_demo_assets"
-    demo_assets_dir.mkdir(parents=True, exist_ok=True)
-    demo_receptor_dst = demo_assets_dir / receptor_info["path"].name
-
-    demo_upload = st.file_uploader("Optional: upload a receptor (PDBQT)", type=["pdbqt"], key="demo_receptor_upload")
-    if st.button("Use bundled receptor", key="demo_prepare_receptor"):
-        if receptor_info["path"].exists():
-            shutil.copy2(receptor_info["path"], demo_receptor_dst)
-            st.success(f"Copied demo receptor to {demo_receptor_dst}")
-        else:
-            st.error(f"Bundled receptor not found at {receptor_info['path']}.")
-
-    if demo_upload is not None:
-        demo_receptor_dst.write(demo_upload.getbuffer())
-        st.info(f"Using uploaded receptor: {demo_receptor_dst}")
-    elif receptor_info["path"].exists() and not demo_receptor_dst.exists():
-        try:
-            shutil.copy2(receptor_info["path"], demo_receptor_dst)
-        except Exception as exc:
-            st.error(f"Could not copy demo receptor: {exc}")
-    receptor_path = demo_receptor_dst if demo_receptor_dst.exists() else receptor_info["path"]
-
-    ligand_files = []
-    if DEMO_LIGAND_SOURCE_DIR.exists():
-        ligand_files = sorted(DEMO_LIGAND_SOURCE_DIR.glob("*.pdbqt"))
-        if not ligand_files:
-            ligand_files = sorted(DEMO_LIGAND_SOURCE_DIR.rglob("*.pdbqt"))
-    ligand_labels = [p.name for p in ligand_files]
-    if not ligand_labels:
+    st.session_state["demo_selected_name"] = selected_preset_name
+    demo_preset = DEMO_RECEPTOR_SETTINGS[selected_preset_name]
+    receptor_default_path = str(demo_preset["path"])
+    if not Path(receptor_default_path).exists():
         st.warning(
-            "No bundled ligands detected. Upload ligands below to continue."
+            f"Bundled receptor not found at {receptor_default_path}. Upload a receptor below or adjust the path."
         )
-        ligand_paths = []
-        uploaded_demo_ligands = st.file_uploader(
+
+st.subheader("Upload Receptor & Ligands")
+upload_col1, upload_col2 = st.columns(2)
+
+with upload_col1:
+    st.markdown("**Receptor**")
+    receptor_mode_index = 1 if demo_mode else 0
+    receptor_input_mode = st.radio(
+        "Provide receptor via:",
+        ["Upload file", "Local path"],
+        index=receptor_mode_index,
+        horizontal=True,
+        key=f"{page_mode}_receptor_mode"
+    )
+    receptor_uploaded = None
+    receptor_local_path = ""
+    if receptor_input_mode == "Upload file":
+        receptor_uploaded = st.file_uploader(
+            "Upload receptor (PDBQT)",
+            type=["pdbqt"],
+            accept_multiple_files=False,
+            key=f"{page_mode}_receptor_upload"
+        )
+    else:
+        receptor_local_path = st.text_input(
+            "Receptor file path",
+            value=receptor_default_path,
+            key=f"{page_mode}_receptor_path"
+        ).strip()
+        if demo_mode:
+            st.caption(f"Bundled default path: {receptor_default_path}")
+
+with upload_col2:
+    st.markdown("**Ligands**")
+    lig_src = st.text_input(
+        "Ligand SOURCE folder (to prepare)",
+        value=str((work_dir / "Files_for_GUI" / "Ligands").resolve()),
+        key=f"{page_mode}_lig_src"
+    )
+    prep_btn = st.button(
+        "Prepare ligands from SOURCE → prepared_ligands",
+        key=f"{page_mode}_prep_btn"
+    )
+    lig_mode = st.radio(
+        "Docking ligands come from:",
+        ["prepared_ligands folder", "Upload now"],
+        index=0,
+        key=f"{page_mode}_lig_mode"
+    )
+    ligand_uploads = []
+    if lig_mode == "Upload now":
+        ligand_uploads = st.file_uploader(
             "Upload ligand PDBQT files",
             type=["pdbqt"],
             accept_multiple_files=True,
-            key="demo_ligand_upload"
+            key=f"{page_mode}_ligand_upload"
         )
-        if uploaded_demo_ligands:
-            demo_ligand_dir = demo_assets_dir / "ligands"
-            demo_ligand_dir.mkdir(parents=True, exist_ok=True)
-            for uploaded in uploaded_demo_ligands:
-                dst = demo_ligand_dir / uploaded.name
-                dst.write_bytes(uploaded.getbuffer())
-                ligand_paths.append(dst)
-        if not ligand_paths:
-            st.stop()
-    else:
-        st.markdown("**Select ligand(s)**")
-        default_selection = st.session_state.get("demo_ligand_selection", [])
-        selected_labels = []
-        demo_ligand_dir = demo_assets_dir / "ligands"
-        demo_ligand_dir.mkdir(parents=True, exist_ok=True)
-        for lig_name in ligand_labels:
-            checked = st.checkbox(
-                lig_name,
-                value=lig_name in default_selection,
-                key=f"demo_ligand_checkbox_{lig_name}"
-            )
-            if checked:
-                selected_labels.append(lig_name)
-        st.session_state["demo_ligand_selection"] = selected_labels
-        ligand_lookup = {p.name: p for p in ligand_files}
-        ligand_paths = []
-        for name in selected_labels:
-            if name in ligand_lookup:
-                src = ligand_lookup[name]
-                dst = demo_ligand_dir / src.name
-                if src.exists():
-                    if not dst.exists():
-                        shutil.copy2(src, dst)
-                    ligand_paths.append(dst)
-                else:
-                    st.error(f"Ligand file missing: {src}")
-        if not ligand_paths:
-            st.warning("Select at least one ligand to enable docking.")
-        else:
-            missing = [p for p in ligand_paths if not p.exists()]
-            if missing:
-                for missing_path in missing:
-                    src = DEMO_LIGAND_SOURCE_DIR / missing_path.name
-                    if src.exists():
-                        shutil.copy2(src, missing_path)
-                if missing:
-                    st.warning("One or more demo ligands were missing locally and have been restored.")
-        if receptor_path.exists() is False:
-            st.error(
-                "Selected receptor is missing. Upload a receptor file or ensure the bundled receptor exists."
-            )
-else:
-    st.subheader("Upload Receptor & Ligands")
-    upload_col1, upload_col2 = st.columns(2)
 
-    with upload_col1:
-        st.markdown("**Receptor**")
-        receptor_input_mode = st.radio("Provide receptor via:", ["Upload file", "Local path"], index=0, horizontal=True)
-        receptor_uploaded = None
-        receptor_local_path = None
-        if receptor_input_mode == "Upload file":
-            receptor_uploaded = st.file_uploader("Upload receptor (PDBQT)", type=["pdbqt"], accept_multiple_files=False, key="receptor_upload")
-        else:
-            receptor_local_path = st.text_input("Receptor file path", value=str((work_dir / "receptor.pdbqt").resolve()), key="receptor_path")
-
-    with upload_col2:
-        st.markdown("**Ligands**")
-        lig_src = st.text_input("Ligand SOURCE folder (to prepare)", value=str((work_dir / "Files_for_GUI" / "Ligands").resolve()), key="lig_src")
-        prep_btn = st.button("Prepare ligands from SOURCE → prepared_ligands", key="prep_btn")
-        lig_mode = st.radio("Docking ligands come from:", ["prepared_ligands folder", "Upload now"], index=0, key="lig_mode")
-        ligand_uploads = []
-        if lig_mode == "Upload now":
-            ligand_uploads = st.file_uploader("Upload ligand PDBQT files", type=["pdbqt"], accept_multiple_files=True, key="ligand_upload")
-
-    demo_selected_receptor = None
-    ligand_paths: List[Path] = []
-
-# ---------------------------------------------
-existing_ligand_paths = locals().get("ligand_paths", [])
-ligand_paths = existing_ligand_paths
+ligand_paths: List[Path] = []
 prepared_root = work_dir
 
-if page_mode != "demo":
-    if prep_btn:
-        try:
-            prepared = prepare_ligands_from_folder(Path(lig_src).expanduser().resolve(), prepared_root)
-            st.success(f"Prepared {len(prepared)} ligands → {prepared[0].parent}")
-        except Exception as e:
-            st.error(str(e))
+if prep_btn:
+    try:
+        prepared = prepare_ligands_from_folder(Path(lig_src).expanduser().resolve(), prepared_root)
+        st.success(f"Prepared {len(prepared)} ligands → {prepared[0].parent}")
+    except Exception as e:
+        st.error(str(e))
 
-    if lig_mode == "Upload now" and ligand_uploads:
-        lig_dir = work_dir / "ligands_uploaded"
-        lig_dir.mkdir(parents=True, exist_ok=True)
-        ligand_paths = []
-        for up in ligand_uploads:
-            ligand_paths.append(_save_uploaded_file(up, lig_dir))
-    else:
-        default_prepared_dir = prepared_root / "prepared_ligands" / "ligands_no_hydrogens"
-        ligand_paths = sorted(default_prepared_dir.glob("*.pdbqt"))
-
-existing_receptor_path = locals().get("receptor_path", None)
-if page_mode != "demo":
-    receptor_path = None
-    if receptor_input_mode == "Upload file" and receptor_uploaded is not None:
-        receptor_path = _save_uploaded_file(receptor_uploaded, work_dir / "receptor")
-    elif receptor_input_mode == "Local path" and receptor_local_path:
-        receptor_path = Path(receptor_local_path).expanduser().resolve()
+if lig_mode == "Upload now" and ligand_uploads:
+    lig_dir = work_dir / "ligands_uploaded"
+    lig_dir.mkdir(parents=True, exist_ok=True)
+    ligand_paths = []
+    for up in ligand_uploads:
+        ligand_paths.append(_save_uploaded_file(up, lig_dir))
 else:
-    receptor_path = existing_receptor_path
+    default_prepared_dir = prepared_root / "prepared_ligands" / "ligands_no_hydrogens"
+    ligand_paths = sorted(default_prepared_dir.glob("*.pdbqt"))
 
-if page_mode == "demo":
-    stored_choice = st.session_state.get("demo_receptor_choice")
-    stored_receptor_path = st.session_state.get("demo_receptor_path")
-    if stored_receptor_path:
-        receptor_candidate = Path(stored_receptor_path)
-        if not receptor_candidate.exists() and stored_choice in DEMO_RECEPTOR_SETTINGS:
-            receptor_src = DEMO_RECEPTOR_SETTINGS[stored_choice]["path"]
-            receptor_candidate.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(receptor_src, receptor_candidate)
-        receptor_path = receptor_candidate
-    stored_ligand_paths = st.session_state.get("demo_ligand_paths")
-    if stored_ligand_paths:
-        recovered_paths = []
-        for lp in stored_ligand_paths:
-            ligand_path_obj = Path(lp)
-            if not ligand_path_obj.exists():
-                src = DEMO_LIGAND_SOURCE_DIR / ligand_path_obj.name
-                if src.exists():
-                    ligand_path_obj.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(src, ligand_path_obj)
-            if ligand_path_obj.exists():
-                recovered_paths.append(ligand_path_obj)
-        if recovered_paths:
-            ligand_paths = recovered_paths
+receptor_path: Optional[Path] = None
+if receptor_input_mode == "Upload file" and receptor_uploaded is not None:
+    receptor_path = _save_uploaded_file(receptor_uploaded, work_dir / "receptor")
+elif receptor_input_mode == "Local path" and receptor_local_path:
+    receptor_path = Path(receptor_local_path).expanduser().resolve()
+elif demo_mode:
+    receptor_path = Path(receptor_default_path).expanduser()
 
-if page_mode == "demo":
-    allowed_backends = ["Vina (box)", "AD4 (maps)"]
+# ---------------------------------------------
+
+if demo_mode:
+    allowed_backends = ["AD4 (maps)"]
     default_backend_label = "AD4 (maps)"
+    preset_center = demo_preset["center"] if demo_preset else (-6.421, 0.342, 17.256)
+    preset_size = demo_preset["size"] if demo_preset else (20.0, 20.0, 20.0)
+    preset_spacing = demo_preset.get("spacing", 0.38) if demo_preset else 0.38
     grid_defaults = {
-        "center": receptor_info["center"],
-        "size": receptor_info["size"],
-        "spacing": 0.38,
+        "center": preset_center,
+        "size": preset_size,
+        "spacing": preset_spacing,
     }
-    maps_prefix_default = str((work_dir / "ad4_maps" / receptor_path.stem).resolve())
+    receptor_stem_source = receptor_path if receptor_path else Path(receptor_default_path)
+    maps_prefix_default = str((work_dir / "ad4_maps" / receptor_stem_source.stem).resolve())
 elif page_mode == "vina":
     allowed_backends = ["Vina (box)"]
     default_backend_label = "Vina (box)"
@@ -1559,10 +1484,10 @@ with st.expander("Configuration", expanded=True):
         default_size = grid_defaults["size"]
         default_spacing = grid_defaults["spacing"]
 
-        if page_mode == "demo":
+        if demo_mode:
             receptor_state_key = f"{page_mode}_selected_receptor"
-            if st.session_state.get(receptor_state_key) != demo_selected_receptor:
-                st.session_state[receptor_state_key] = demo_selected_receptor
+            if st.session_state.get(receptor_state_key) != selected_preset_name:
+                st.session_state[receptor_state_key] = selected_preset_name
                 for idx, axis in enumerate(["x", "y", "z"]):
                     st.session_state[center_keys[axis]] = default_center[idx]
                     st.session_state[size_keys[axis]] = default_size[idx]
