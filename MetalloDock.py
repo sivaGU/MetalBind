@@ -1274,7 +1274,7 @@ st.caption(f"Using working directory: `{work_dir}`")
 if page_mode == "demo":
     st.subheader("Select Receptor & Ligands")
     if not DEMO_RECEPTOR_SETTINGS["Carbonic Anhydrase I (7Q0D)"]["path"].exists() or not DEMO_LIGAND_SOURCE_DIR.exists():
-        st.error("Demo assets folder missing. Ensure `MetalloDock Receptors and Ligands/` is included in the repo.")
+        st.error("Demo assets folder missing. Ensure `Carbonic Anhydrase Receptor Files/` and `18 PFAS Ligands/` are included in the repo.")
     receptor_choice = st.selectbox(
         "Select receptor",
         list(DEMO_RECEPTOR_SETTINGS.keys()),
@@ -1301,7 +1301,7 @@ if page_mode == "demo":
     ligand_files = sorted(DEMO_LIGAND_SOURCE_DIR.glob("*.pdbqt"))
     ligand_labels = [p.name for p in ligand_files]
     if not ligand_labels:
-        st.error("No ligands found in `MetalloDock Receptors and Ligands/18 PFAS`. Add the sample PFAS ligands to run the demo.")
+        st.error("No ligands found in `18 PFAS Ligands/`. Add the sample PFAS ligands to run the demo.")
         ligand_paths = []
     else:
         st.markdown("**Select ligand(s)**")
