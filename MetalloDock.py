@@ -2214,3 +2214,4 @@ def build_ad4_maps(
 def build_ad4_maps_for_selection(*args, **kwargs):
     """Backward-compatible wrapper for legacy code paths."""
     return build_ad4_maps(*args, **kwargs)
+
