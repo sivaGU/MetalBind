@@ -1307,6 +1307,17 @@ THEME_CSS = f"""
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }}
 
+/* Force white text on all buttons in main content area */
+.block-container .stButton > button,
+.block-container button {{
+    color: {WHITE} !important;
+}}
+
+.block-container .stButton > button *,
+.block-container button * {{
+    color: {WHITE} !important;
+}}
+
 /* Sidebar: vertical light blue → dark blue gradient */
 [data-testid="stSidebar"] {{
     background: linear-gradient(180deg, {LIGHT_POWDER_BLUE} 0%, {SOFT_SKY_BLUE} 40%, {MIDNIGHT_AZURE} 100%);
@@ -1320,7 +1331,7 @@ THEME_CSS = f"""
 
 /* Primary buttons (Run Docking, etc.) */
 .stButton > button, .stDownloadButton > button {{
-    background: {MEDIUM_STEEL_BLUE};
+    background: {MEDIUM_STEEL_BLUE} !important;
     color: {WHITE} !important;
     border: none;
     border-radius: 999px;
@@ -1330,33 +1341,70 @@ THEME_CSS = f"""
 }}
 
 .stButton > button:hover, .stDownloadButton > button:hover {{
-    background: {DEEP_CERULEAN};
+    background: {DEEP_CERULEAN} !important;
     color: {WHITE} !important;
     transform: translateY(-1px);
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
 }}
 
-/* Ensure all button types (primary, secondary) have white text on blue backgrounds */
+/* Force white text on ALL Streamlit buttons - most aggressive selectors */
+.stButton > button,
+.stButton button,
+button[data-baseweb="button"],
+button.kind-primary,
+button.kind-secondary,
 .stButton > button[data-baseweb="button"],
 .stButton > button.kind-primary,
 .stButton > button.kind-secondary,
-button[data-baseweb="button"] {{
+div[data-testid] button,
+div[data-baseweb] button {{
+    color: {WHITE} !important;
+}}
+
+/* Target button text/span elements inside buttons */
+.stButton > button *,
+.stButton button *,
+button[data-baseweb="button"] *,
+.stButton > button span,
+.stButton > button p,
+.stButton > button div,
+button[data-baseweb="button"] span,
+button[data-baseweb="button"] p,
+button[data-baseweb="button"] div {{
     color: {WHITE} !important;
 }}
 
 /* Sidebar buttons specifically - ensure white text */
 [data-testid="stSidebar"] .stButton > button {{
-    background: {MEDIUM_STEEL_BLUE};
+    background: {MEDIUM_STEEL_BLUE} !important;
+    color: {WHITE} !important;
+}}
+
+[data-testid="stSidebar"] .stButton > button * {{
     color: {WHITE} !important;
 }}
 
 [data-testid="stSidebar"] .stButton > button:hover {{
-    background: {DEEP_CERULEAN};
+    background: {DEEP_CERULEAN} !important;
     color: {WHITE} !important;
 }}
 
-/* Ensure all Streamlit buttons have white text when they have blue backgrounds */
-.stButton button {{
+[data-testid="stSidebar"] .stButton > button:hover * {{
+    color: {WHITE} !important;
+}}
+
+/* Final catch-all for any button with blue background - target by background color */
+button[style*="background"],
+button[style*="rgb(44, 124, 181)"],
+button[style*="#2C7CB5"],
+button[style*="#2c7cb5"] {{
+    color: {WHITE} !important;
+}}
+
+button[style*="background"] *,
+button[style*="rgb(44, 124, 181)"] *,
+button[style*="#2C7CB5"] *,
+button[style*="#2c7cb5"] * {{
     color: {WHITE} !important;
 }}
 
