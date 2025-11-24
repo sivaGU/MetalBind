@@ -1430,15 +1430,37 @@ div[data-testid="stFileUploader"] small {{
     color: #000000 !important;
 }}
 
-/* File uploader button text should also be black */
+/* File uploader button text should also be black - most specific selectors */
 [data-testid="stFileUploader"] button,
 [data-testid="stFileUploader"] button *,
+[data-testid="stFileUploader"] button span,
+[data-testid="stFileUploader"] button p,
+[data-testid="stFileUploader"] button div,
 [data-testid="stFileUploader"] .stButton button,
 [data-testid="stFileUploader"] .stButton button *,
+[data-testid="stFileUploader"] .stButton button span,
+[data-testid="stFileUploader"] [data-baseweb="button"],
+[data-testid="stFileUploader"] [data-baseweb="button"] *,
+[data-testid="stFileUploader"] [data-baseweb="button"] span,
 .stFileUploader button,
 .stFileUploader button *,
+.stFileUploader button span,
 .stFileUploader .stButton button,
-.stFileUploader .stButton button * {{
+.stFileUploader .stButton button *,
+.stFileUploader .stButton button span,
+.stFileUploader [data-baseweb="button"],
+.stFileUploader [data-baseweb="button"] *,
+.stFileUploader [data-baseweb="button"] span {{
+    color: #000000 !important;
+}}
+
+/* Target buttons inside file uploader containers with even higher specificity */
+div[data-testid="stFileUploader"] > div button,
+div[data-testid="stFileUploader"] > div button *,
+div[data-testid="stFileUploader"] > div button span,
+div[data-testid="stFileUploader"] div[data-baseweb="button"],
+div[data-testid="stFileUploader"] div[data-baseweb="button"] *,
+div[data-testid="stFileUploader"] div[data-baseweb="button"] span {{
     color: #000000 !important;
 }}
 
@@ -1448,6 +1470,19 @@ div[data-testid="stFileUploader"] small {{
 [data-testid="stFileUploader"] [data-baseweb="file-uploader"] span,
 [data-testid="stFileUploader"] [data-baseweb="file-uploader"] p {{
     color: #000000 !important;
+}}
+
+/* Final override for ALL buttons within file uploader - must come after general button rules */
+[data-testid="stFileUploader"] button[data-baseweb="button"],
+[data-testid="stFileUploader"] button[data-baseweb="button"] *,
+[data-testid="stFileUploader"] button[data-baseweb="button"] span,
+[data-testid="stFileUploader"] button[data-baseweb="button"] p,
+[data-testid="stFileUploader"] button[data-baseweb="button"] div,
+.stFileUploader button[data-baseweb="button"],
+.stFileUploader button[data-baseweb="button"] *,
+.stFileUploader button[data-baseweb="button"] span {{
+    color: #000000 !important;
+    background-color: transparent !important;
 }}
 
 /* Radio + checkbox accent color */
@@ -1485,6 +1520,24 @@ h1, h2, h3, h4, h5 {{
 /* Metric labels, captions, small text slightly muted blue */
 span, p, label {{
     color: {MIDNIGHT_AZURE};
+}}
+
+/* FINAL OVERRIDE: File uploader buttons MUST have black text - highest specificity */
+[data-testid="stFileUploader"] .stButton > button,
+[data-testid="stFileUploader"] .stButton > button *,
+[data-testid="stFileUploader"] .stButton > button span,
+[data-testid="stFileUploader"] .stButton > button p,
+[data-testid="stFileUploader"] .stButton > button div,
+[data-testid="stFileUploader"] button.stButton,
+[data-testid="stFileUploader"] button.stButton *,
+[data-testid="stFileUploader"] button.stButton span,
+div[data-testid="stFileUploader"] .stButton > button,
+div[data-testid="stFileUploader"] .stButton > button *,
+div[data-testid="stFileUploader"] .stButton > button span,
+div[data-testid="stFileUploader"] button,
+div[data-testid="stFileUploader"] button *,
+div[data-testid="stFileUploader"] button span {{
+    color: #000000 !important;
 }}
 </style>
 """
