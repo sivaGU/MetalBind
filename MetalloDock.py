@@ -21,14 +21,15 @@ import pandas as pd
 import argparse
 import sys
 
+
 # ---- MetalloDock Theme Palette ----
-LIGHT_POWDER_BLUE = "#99C0DE"     # Light Powder Blue
-SOFT_SKY_BLUE = "#74A9D1"         # Soft Sky Blue
-LIGHT_AZURE = "#4B93C4"           # Light Azure / Cornflower Blue
-MEDIUM_STEEL_BLUE = "#2C7CB5"     # Medium Steel Blue
-DEEP_CERULEAN = "#1468A1"         # Deep Cerulean
-RICH_TEAL_BLUE = "#005E8B"        # Rich Teal Blue
-MIDNIGHT_AZURE = "#004E7F"        # Midnight Azure / Deep Ocean Blue
+LIGHT_POWDER_BLUE = "#6B9FC0"     # Darker Light Powder Blue
+SOFT_SKY_BLUE = "#4A7FA8"         # Darker Soft Sky Blue
+LIGHT_AZURE = "#2D6B94"           # Darker Light Azure
+MEDIUM_STEEL_BLUE = "#1C5C8F"     # Darker Medium Steel Blue
+DEEP_CERULEAN = "#0D4F7A"         # Darker Deep Cerulean
+RICH_TEAL_BLUE = "#004566"        # Darker Rich Teal Blue
+MIDNIGHT_AZURE = "#003A5F"        # Darker Midnight Azure
 WHITE = "#FFFFFF"
 
 # Demo preset defaults
@@ -2483,6 +2484,7 @@ def build_ad4_maps(
 def build_ad4_maps_for_selection(*args, **kwargs):
     """Backward-compatible wrapper for legacy code paths."""
     return build_ad4_maps(*args, **kwargs)
+
 
 
 
