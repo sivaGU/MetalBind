@@ -1319,9 +1319,9 @@ THEME_CSS = f"""
     color: {WHITE} !important;
 }}
 
-/* Sidebar: vertical light blue → dark blue gradient */
+/* Sidebar: solid color (no gradient) */
 [data-testid="stSidebar"] {{
-    background: linear-gradient(180deg, {LIGHT_POWDER_BLUE} 0%, {SOFT_SKY_BLUE} 40%, {MIDNIGHT_AZURE} 100%);
+    background: {MEDIUM_STEEL_BLUE};
     color: {WHITE};
 }}
 
@@ -2484,6 +2484,7 @@ def build_ad4_maps(
 def build_ad4_maps_for_selection(*args, **kwargs):
     """Backward-compatible wrapper for legacy code paths."""
     return build_ad4_maps(*args, **kwargs)
+
 
 
 
