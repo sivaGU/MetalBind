@@ -1927,7 +1927,7 @@ with st.expander("Configuration", expanded=True):
                 key=f"{state_prefix}_force_types"
             )
             build_maps_btn = st.button(
-                "Build/Update AD4 maps (auto-detect & include missing types)",
+                "Build/Update AD4 Maps",
                 key=f"{state_prefix}_build_maps"
             )
         else:
