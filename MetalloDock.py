@@ -1802,8 +1802,10 @@ with st.expander("Configuration", expanded=True):
             )
         autodetect = False
         if backend == "Vina (box)":
+            # Hide label text for Standard AutoDock tab only
+            checkbox_label = "" if page == "Standard AutoDock" else "Auto-detect metal center (for Vina run)"
             autodetect = st.checkbox(
-                "Auto-detect metal center (for Vina run)",
+                checkbox_label,
                 value=True,
                 key=f"{state_prefix}_autodetect"
             )
