@@ -1,6 +1,6 @@
-# MetalloDock GUI
+# ZincBind GUI
 
-MetalloDock is a Streamlit-based interface that wraps AutoDock Vina and AutoDock4 (AD4) so metalloprotein docking runs are easy to configure, execute, and review.
+ZincBind is a Streamlit-based interface that wraps AutoDock Vina and AutoDock4 (AD4) so metalloprotein docking runs are easy to configure, execute, and review.
 
 Hosted app: https://metallodock-niv29aly8pujiceythjnx7.streamlit.app/
 
@@ -28,7 +28,7 @@ Hosted app: https://metallodock-niv29aly8pujiceythjnx7.streamlit.app/
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd MetalloDock-main
+   cd ZincBind-main
    ```
 2. **Install dependencies**
    ```bash
@@ -36,7 +36,7 @@ Hosted app: https://metallodock-niv29aly8pujiceythjnx7.streamlit.app/
    ```
 3. **Launch the app**
    ```bash
-   streamlit run MetalloDock.py
+   streamlit run ZincBind.py
    ```
    *Windows:* double-click `run_docking.bat` to launch Streamlit.
 4. Visit `http://localhost:8501` in your browser.
@@ -49,12 +49,12 @@ Hosted app: https://metallodock-niv29aly8pujiceythjnx7.streamlit.app/
   - `autogrid4.exe`
   - `autodock4.exe`
 
-*Linux/Mac:* compile or install equivalent binaries (without `.exe` extensions) and update paths in `MetalloDock.py` or drop them inside `Files_for_GUI/`.
+*Linux/Mac:* compile or install equivalent binaries (without `.exe` extensions) and update paths in `ZincBind.py` or drop them inside `Files_for_GUI/`.
 
 ## Project Structure
 ```
-MetalloDock-main/
-├── MetalloDock.py          # Main Streamlit application
+ZincBind-main/
+├── ZincBind.py          # Main Streamlit application
 ├── Files_for_GUI/          # Executables, parameters, sample ligands
 │   ├── vina.exe
 │   ├── autogrid4.exe
@@ -78,7 +78,7 @@ MetalloDock-main/
 ## Demo Tab Assets
 The *Demo* tab is preconfigured for Carbonic Anhydrase I & II receptors. To use it:
 1. **Download the demo assets** from the `Carbonic Anhydrase Receptor Files` and `18 PFAS Ligands` folders in the repository.
-2. Place these folders alongside `MetalloDock.py` (locally) or upload their contents to the Streamlit Cloud workspace under the same folder names.
+2. Place these folders alongside `ZincBind.py` (locally) or upload their contents to the Streamlit Cloud workspace under the same folder names.
 3. In the app, choose either "Carbonic Anhydrase I" or "Carbonic Anhydrase II". Grid centers, sizes, spacing (0.375 Å), and docking parameters lock automatically.
 4. Upload one of the bundled receptors (PDBQT) and select ligands from the PFAS set before running AD4 map building or docking.
 

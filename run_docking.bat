@@ -1,5 +1,5 @@
 @echo off
-echo MetalloDock - Quick Start
+echo ZincBind - Quick Start
 echo ========================
 
 REM Check if Python is available
@@ -50,20 +50,20 @@ if not exist "Files_for_GUI\Ligands" (
     exit /b 1
 )
 
-if not exist "MetalloDock.py" (
-    echo Error: MetalloDock.py not found in current directory
+if not exist "ZincBind.py" (
+    echo Error: ZincBind.py not found in current directory
     echo Please ensure you are running this from the Final Code folder
     pause
     exit /b 1
 )
 
-echo Starting MetalloDock GUI...
+echo Starting ZincBind GUI...
 echo.
 
 REM Run the original GUI
-echo Running: streamlit run MetalloDock.py
+echo Running: streamlit run ZincBind.py
 echo Opening browser at http://localhost:8501
 echo.
-streamlit run MetalloDock.py
+streamlit run ZincBind.py
 
 pause
