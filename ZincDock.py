@@ -803,9 +803,32 @@ def run_vina_batch(
 # ==============================
 
 def find_smina_executable() -> Optional[Path]:
-    """Find SMINA executable in PATH or conda environment."""
+    """Find SMINA/GNINA executable in Files_for_GUI, PATH, or conda environment."""
+    # First check Files_for_GUI (similar to how Vina is found)
+    files_gui_dir = Path(__file__).parent / "Files_for_GUI"
+    is_windows_platform = platform.system() == "Windows"
+    if is_windows_platform:
+        # Windows: try gnina.exe or smina.exe
+        gnina_path = files_gui_dir / "gnina.exe"
+        smina_path = files_gui_dir / "smina.exe"
+        if gnina_path.exists():
+            return gnina_path
+        if smina_path.exists():
+            return smina_path
+    else:
+        # Linux (Streamlit Cloud): try without .exe extension
+        gnina_path = files_gui_dir / "gnina"
+        smina_path = files_gui_dir / "smina"
+        if gnina_path.exists():
+            return gnina_path
+        if smina_path.exists():
+            return smina_path
+    
     # Check PATH
     exe = shutil.which("smina")
+    if exe:
+        return Path(exe)
+    exe = shutil.which("gnina")
     if exe:
         return Path(exe)
     
@@ -827,7 +850,14 @@ def find_smina_executable() -> Optional[Path]:
     conda_base = os.environ.get("CONDA_PREFIX", "")
     if conda_base:
         is_windows_platform = platform.system() == "Windows"
-        smina_path = Path(conda_base) / "Library" / "bin" / "smina.exe" if is_windows_platform else Path(conda_base) / "bin" / "smina"
+        if is_windows_platform:
+            smina_path = Path(conda_base) / "Library" / "bin" / "smina.exe"
+            gnina_path = Path(conda_base) / "Library" / "bin" / "gnina.exe"
+        else:
+            smina_path = Path(conda_base) / "bin" / "smina"
+            gnina_path = Path(conda_base) / "bin" / "gnina"
+        if gnina_path.exists():
+            return gnina_path
         if smina_path.exists():
             return smina_path
     
@@ -888,8 +918,23 @@ def call_gnina_backend_api(
             
             # Make request with timeout
             response = requests.post(endpoint, files=files, data=data, timeout=600)
-            response.raise_for_status()
-            result = response.json()
+            
+            # Check response status
+            if response.status_code != 200:
+                error_detail = f"HTTP {response.status_code}"
+                try:
+                    error_json = response.json()
+                    error_detail = error_json.get("detail", error_detail)
+                except:
+                    error_detail = f"HTTP {response.status_code}: {response.text[:200]}"
+                return (False, error_detail, 0, None)
+            
+            # Try to parse JSON response
+            try:
+                result = response.json()
+            except ValueError as e:
+                # Not JSON - likely wrong endpoint or backend not properly deployed
+                return (False, f"Backend returned non-JSON response. Is the FastAPI app deployed? Response: {response.text[:200]}", 0, None)
             
             if result.get("status") == "success":
                 affinities = result.get("affinities", [])
@@ -907,17 +952,23 @@ def call_gnina_backend_api(
                         file_response.raise_for_status()
                         # Return the file content - caller will save it
                         output_file_path = file_response.content
-                    except:
+                    except Exception as e:
+                        # Log but don't fail - affinities are still useful
                         pass
                 
                 return (True, aff_str, nposes, output_file_path)
             else:
-                return (False, "", 0, None)
+                error_msg = result.get("detail", result.get("error", "Unknown error"))
+                return (False, error_msg, 0, None)
                 
+    except requests.exceptions.Timeout:
+        return (False, "Request timeout (backend may be overloaded)", 0, None)
+    except requests.exceptions.ConnectionError:
+        return (False, f"Connection error: Cannot reach {backend_url}. Is the backend running?", 0, None)
     except requests.exceptions.RequestException as e:
-        return (False, f"API Error: {str(e)[:100]}", 0, None)
+        return (False, f"API Error: {str(e)[:150]}", 0, None)
     except Exception as e:
-        return (False, f"Error: {str(e)[:100]}", 0, None)
+        return (False, f"Error: {str(e)[:150]}", 0, None)
 
 
 def parse_gnina_affinities(stdout: str, num_modes: int = 10) -> List[float]:
@@ -970,16 +1021,32 @@ def run_gnina_one(
             num_modes, exhaustiveness, seed, cnn_scoring
         )
         
-        # Save output file if received
-        if ok and output_content:
-            out_pdbqt.parent.mkdir(parents=True, exist_ok=True)
-            with open(out_pdbqt, "wb") as f:
-                f.write(output_content)
-            with open(log_file, "w", encoding="utf-8") as lf:
-                lf.write(f"Backend API: {backend_url}\n")
+        # Always write to log file (success or failure)
+        out_pdbqt.parent.mkdir(parents=True, exist_ok=True)
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_file, "w", encoding="utf-8") as lf:
+            lf.write(f"Backend API: {backend_url}\n")
+            lf.write(f"Endpoint: {backend_url.rstrip('/')}/dock\n")
+            lf.write(f"Receptor: {receptor_file.name}\n")
+            lf.write(f"Ligand: {ligand_file.name}\n")
+            lf.write(f"Center: {center}\n")
+            lf.write(f"Size: {size}\n")
+            lf.write(f"Num modes: {num_modes}, Exhaustiveness: {exhaustiveness}\n")
+            lf.write(f"Seed: {seed}\n")
+            lf.write(f"CNN scoring: {cnn_scoring}\n")
+            lf.write("\n---- RESULT ----\n")
+            if ok:
                 lf.write(f"Status: Success\n")
                 lf.write(f"Affinity: {aff_str}\n")
                 lf.write(f"Poses: {nposes}\n")
+            else:
+                lf.write(f"Status: Failed\n")
+                lf.write(f"Error: {aff_str}\n")  # Error message is in aff_str when ok=False
+        
+        # Save output file if received
+        if ok and output_content:
+            with open(out_pdbqt, "wb") as f:
+                f.write(output_content)
         
         return (ok, aff_str, nposes)
     
