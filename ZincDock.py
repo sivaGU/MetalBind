@@ -2069,16 +2069,6 @@ if "docking_status_message" not in st.session_state:
 
 st.title(page)
 
-# GNINA-specific info message for Streamlit Cloud
-if page_mode == "gnina":
-    smina_exe_check = find_smina_executable()
-    if smina_exe_check is None:
-        st.warning(
-            "⚠️ **SMINA/GNINA is not available on Streamlit Cloud** (requires compiled C++ binaries). "
-            "This tab will not work on Streamlit Cloud. To use GNINA ML Docking:\n\n"
-            "• **Run ZincDock locally** with SMINA installed via conda (`conda install -c conda-forge smina`)\n"
-            "• **Or use** the 'Standard AutoDock' or 'Metalloprotein Docking' tabs which work on Streamlit Cloud"
-        )
 
 # Working directory chooser
 work_dir_input = st.text_input(
@@ -2775,12 +2765,8 @@ if run_btn:
             if smina_exe is None or (isinstance(smina_exe, Path) and not smina_exe.exists()):
                 st.error("SMINA/GNINA executable not found and no backend URL provided.")
                 st.warning(
-                    "**Note for Streamlit Cloud users:** SMINA/GNINA is a compiled C++ binary that cannot be installed on Streamlit Cloud. "
-                    "To use GNINA ML Docking:\n\n"
-                    "1. **Run locally**: Install SMINA via conda (`conda install -c conda-forge smina`) and run ZincDock.py locally\n"
-                    "2. **Use Backend API**: Enter a backend API URL in the Configuration section (or set GNINA_BACKEND_URL in Streamlit secrets)\n"
-                    "3. **Alternative**: Use the 'Standard AutoDock' or 'Metalloprotein Docking' tabs which work on Streamlit Cloud\n\n"
-                    "For more information, see the GNINA deployment documentation."
+                    "SMINA/GNINA executable not found. "
+                    "Please ensure SMINA/GNINA is installed, or use the Backend API option in the Configuration section."
                 )
                 st.stop()
         else:
