@@ -2210,27 +2210,32 @@ with st.expander("Configuration", expanded=True):
                 )
             
             # Backend API configuration for GNINA
-            backend_url = None
+            default_backend_url = "https://gnina-backend.railway.app"
             if page_mode == "gnina":
                 st.markdown("---")
                 st.markdown("**Backend API (for Streamlit Cloud)**")
+                
+                # Determine default value: check secrets first, then session state, then use hardcoded default
+                initial_url = default_backend_url
                 try:
-                    # Try to get from Streamlit secrets first
-                    backend_url = st.secrets.get("GNINA_BACKEND_URL", None)
+                    secret_url = st.secrets.get("GNINA_BACKEND_URL", None)
+                    if secret_url:
+                        initial_url = secret_url
                 except:
                     pass
+                
+                # Check if user has already set a value in session state
+                state_key = f"{state_prefix}_backend_url"
+                if state_key in st.session_state and st.session_state[state_key]:
+                    initial_url = st.session_state[state_key]
                 
                 # Allow user to override or set backend URL
                 backend_url_input = st.text_input(
                     "GNINA Backend API URL",
-                    value=backend_url or "",
-                    key=f"{state_prefix}_backend_url",
+                    value=initial_url,
+                    key=state_key,
                     help="Leave empty to use local SMINA, or enter backend API URL (e.g., https://your-backend.railway.app) for cloud deployment"
                 )
-                if backend_url_input and backend_url_input.strip():
-                    backend_url = backend_url_input.strip()
-                else:
-                    backend_url = None
     with c2:
         st.subheader("Grid Box Settings")
         center_keys = {
