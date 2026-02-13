@@ -480,6 +480,28 @@ def zip_outputs(folder: Path) -> bytes:
 # Atom-type utilities (diagnostics + normalization)
 # ==============================
 
+def canon_ad4_type(t: str) -> str:
+    """Normalize AutoDock4 atom type to canonical form.
+    
+    AutoDock4 convention for halogens is Cl, Br, Si (Title-case), 
+    while special AD4 types like NA, OA, SA stay uppercase.
+    """
+    t = (t or "").strip()
+    if not t:
+        return t
+    u = t.upper()
+    # AD4 special atom types that are meant to be uppercase
+    specials = {"NA", "OA", "SA", "HD", "HS"}
+    if u in specials:
+        return u
+    # Typical element-like two-letter types -> Title-case (Cl, Br, Si, Zn, etc.)
+    if t.isalpha() and len(t) == 2:
+        return t[0].upper() + t[1].lower()
+    # Default: keep 1-letter as uppercase, otherwise keep as-is
+    if len(t) == 1 and t.isalpha():
+        return t.upper()
+    return t
+
 def read_types_from_pdbqt(pdbqt_path: Path) -> List[str]:
     """Collect unique AD4 atom types (last token) from ATOM/HETATM lines."""
     seen, types = set(), []
@@ -489,7 +511,7 @@ def read_types_from_pdbqt(pdbqt_path: Path) -> List[str]:
                 if ln.startswith(("ATOM", "HETATM")):
                     toks = ln.split()
                     if toks:
-                        t = toks[-1]
+                        t = canon_ad4_type(toks[-1])
                         if t not in seen:
                             seen.add(t); types.append(t)
     except Exception:
@@ -694,7 +716,7 @@ def list_maps_present(maps_prefix: Path) -> Set[str]:
         # expecting base.<TYPE>.map
         t = p.suffixes[-2].lstrip(".") if len(p.suffixes) >= 2 else None
         if t:
-            present.add(t)
+            present.add(canon_ad4_type(t))
     return present
 
 # ==============================
@@ -2840,7 +2862,7 @@ if build_maps_btn:
 
             force_types = set()
             if force_extra_types:
-                force_types = {tok.strip().upper() for tok in force_extra_types.split(",") if tok.strip()}
+                force_types = {canon_ad4_type(tok) for tok in force_extra_types.split(",") if tok.strip()}
 
             with st.spinner("Building AutoGrid4 maps…"):
                 if receptor_path is None or not receptor_path.exists():
@@ -2903,7 +2925,7 @@ if build_maps_btn:
                 ligand_types = ligand_types_union(ligand_paths) if ligand_paths else set()
                 if force_types:
                     ligand_types.update(force_types)
-                ligand_types = {t.strip().upper() for t in ligand_types if t}
+                ligand_types = {canon_ad4_type(t) for t in ligand_types if t}
                 if not ligand_types:
                     ligand_types = {"C", "F", "O", "OA", "S", "NA"}
                 ligand_types_sorted = sorted(ligand_types)
@@ -3210,7 +3232,7 @@ def list_maps_present(maps_prefix: Path) -> Set[str]:
         # expecting base.<TYPE>.map
         t = p.suffixes[-2].lstrip(".") if len(p.suffixes) >= 2 else None
         if t:
-            present.add(t)
+            present.add(canon_ad4_type(t))
     return present
 
 FORCE_DEFAULT_TYPES = {"C", "F", "O", "OA", "S", "NA"}
@@ -3284,7 +3306,7 @@ def build_ad4_maps(
     ligand_types = ligand_types_union(ligands) if ligands else set()
     if force_types:
         ligand_types.update(force_types)
-    ligand_types = {t.strip().upper() for t in ligand_types if t}
+    ligand_types = {canon_ad4_type(t) for t in ligand_types if t}
     if not ligand_types:
         ligand_types = set(FORCE_DEFAULT_TYPES)
     if not ligand_types:
